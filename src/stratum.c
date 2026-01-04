@@ -130,6 +130,7 @@ int stratum_run(const stratum_options *opts) {
         size_t bytes_out = 0;
         size_t bytes_in = 0;
         size_t notify_count = 0;
+        printf("[stratum] alvo coin: %s\n", coin_type_to_name(opts->coin));
         char subscribe[256];
         snprintf(subscribe, sizeof(subscribe), "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[]}");
         if (!send_line(sock, subscribe)) {

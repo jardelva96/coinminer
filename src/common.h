@@ -2,6 +2,8 @@
 #define COMMON_H
 
 #include <stdint.h>
+#include "coins/registry.h"
+
 typedef struct stratum_options {
     const char *host;
     const char *port;
@@ -9,6 +11,7 @@ typedef struct stratum_options {
     const char *password;
     int max_reconnects;
     int reconnect_delay_secs;
+    coin_type coin;
 } stratum_options;
 
 #define COINMINER_VERSION "0.4.0"

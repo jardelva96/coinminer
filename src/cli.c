@@ -19,6 +19,7 @@ static void set_default_stratum(stratum_options *s) {
     s->password = NULL;
     s->max_reconnects = 5;
     s->reconnect_delay_secs = 5;
+    s->coin = COIN_BTC;
 }
 
 static int parse_int_range(const char *arg, int min, int max, int *out) {
@@ -89,6 +90,9 @@ static int parse_stratum(int argc, char **argv, cli_result *res) {
             int v = atoi(argv[i + 1]);
             if (v < 1) v = 1;
             res->stratum.reconnect_delay_secs = v;
+            i++;
+        } else if (strcmp(argv[i], "--coin") == 0 && i + 1 < argc) {
+            res->stratum.coin = coin_type_from_name(argv[i + 1]);
             i++;
         }
     }
@@ -230,7 +234,7 @@ void print_usage(const char *progname) {
     printf("  %s run [data] [dificuldade_hex] [max_tentativas] [--progress N] [--infinite]\n", progname);
     printf("  %s bench [iteracoes] [--progress N]\n", progname);
     printf("  %s wallet [--wallet caminho] [--reset-wallet]\n", progname);
-    printf("  %s stratum <host> <port> <user> [password] [--retries N] [--delay SECS]\n", progname);
+    printf("  %s stratum <host> <port> <user> [password] [--retries N] [--delay SECS] [--coin NAME]\n", progname);
     printf("  %s help\n", progname);
     printf("  %s version\n\n", progname);
     printf("Argumentos run:\n");

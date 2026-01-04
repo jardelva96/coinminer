@@ -91,5 +91,5 @@ Mined blocks: 1
 ## Stratum (progresso rumo a Bitcoin/pools)
 - Comando `stratum <host> <port> <user> [password] [--retries N] [--delay SECS] [--coin NAME]`.
 - Mantém conexão viva, envia subscribe/authorize, loga pings e estatísticas a cada 30s.
-- Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`).
+- Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`) a partir do array `params`.
 - Reconexão com retentativas e atraso configuráveis via `--retries` e `--delay`.

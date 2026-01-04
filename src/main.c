@@ -30,11 +30,13 @@ static double now_seconds(void) {
 static void print_usage(const char *progname) {
     printf("Uso:\n");
     printf("  %s run [data] [dificuldade_hex] [max_tentativas]\n", progname);
+    printf("  %s bench [iteracoes]\n", progname);
     printf("  %s help\n\n", progname);
     printf("Argumentos:\n");
     printf("  data             string base concatenada ao nonce (default: hello-from-coinminer)\n");
     printf("  dificuldade_hex  zeros iniciais em hexadecimal exigidos (0-64, default: 4)\n");
     printf("  max_tentativas   limite de nonces testados (>=1, default: 2000000)\n");
+    printf("  iteracoes        quantidade de hashes para medir hashrate (bench, default: 500000)\n");
 }
 
 static int parse_difficulty(const char *arg, int *difficulty) {
@@ -54,6 +56,16 @@ static int parse_max_attempts(const char *arg, uint64_t *max_attempts) {
     if (errno != 0 || end == arg || *end != '\0') return 0;
     if (val == 0ull) return 0;
     *max_attempts = (uint64_t)val;
+    return 1;
+}
+
+static int parse_iterations(const char *arg, uint64_t *iters) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long val = strtoull(arg, &end, 10);
+    if (errno != 0 || end == arg || *end != '\0') return 0;
+    if (val == 0ull) return 0;
+    *iters = (uint64_t)val;
     return 1;
 }
 
@@ -92,6 +104,31 @@ static int run_miner(const char *data, int difficulty, uint64_t max) {
     return 0;
 }
 
+static int run_benchmark(uint64_t iterations) {
+    uint8_t hash[SHA256_DIGEST_SIZE];
+    char input[128];
+
+    double start = now_seconds();
+    for (uint64_t i = 0; i < iterations; i++) {
+        int n = snprintf(input, sizeof(input), "bench|%llu", (unsigned long long)i);
+        if (n < 0 || (size_t)n >= sizeof(input)) {
+            fprintf(stderr, "input buffer overflow\n");
+            return 1;
+        }
+
+        sha256_ctx ctx;
+        sha256_init(&ctx);
+        sha256_update(&ctx, (const uint8_t*)input, (size_t)n);
+        sha256_final(&ctx, hash);
+    }
+
+    double elapsed = now_seconds() - start;
+    double hash_rate = (elapsed > 0.0) ? (double)iterations / elapsed : 0.0;
+    printf("Benchmark concluido: %llu hashes\n", (unsigned long long)iterations);
+    printf("Time: %.3fs | Hashrate: %.2f H/s\n", elapsed, hash_rate);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -104,6 +141,17 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(argv[1], "run") != 0) {
+        if (strcmp(argv[1], "bench") == 0) {
+            uint64_t iters = 500000ull;
+            if (argc >= 3 && !parse_iterations(argv[2], &iters)) {
+                fprintf(stderr, "Iteracoes invalidas: %s (use um inteiro >= 1)\n", argv[2]);
+                return 1;
+            }
+
+            printf("Benchmarking %llu hashes...\n", (unsigned long long)iters);
+            return run_benchmark(iters);
+        }
+
         fprintf(stderr, "Comando desconhecido: %s\n\n", argv[1]);
         print_usage(argv[0]);
         return 1;

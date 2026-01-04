@@ -22,6 +22,9 @@ cmake --build build
 # Executar o minerador
 ./build/coinminer run "hello" 4 2000000
 
+# Benchmark (medir hashrate)
+./build/coinminer bench 500000
+
 # Ajuda
 ./build/coinminer help
 ```
@@ -30,6 +33,7 @@ cmake --build build
 - `data`: string base que será concatenada com o nonce.
 - `dificuldade_hex`: número de zeros à esquerda (em hexadecimal) exigidos no hash (0-64).
 - `max_tentativas`: limite de nonces testados antes de abortar (>= 1).
+- `iteracoes`: quantidade de hashes para medir hashrate (benchmark), default 500000.
 
 Se nenhum parâmetro for informado, o comando `./coinminer run` usa:
 - `data` = `hello-from-coinminer`

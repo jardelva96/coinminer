@@ -1,7 +1,9 @@
-# coinminer (SHA-256 + PoW local, Stratum, Solo RPC)
+# solocoinminer (SHA-256 + PoW local, Stratum, Solo RPC)
 
-<<<<<<< HEAD
-Implementação simples de prova-de-trabalho em C usando SHA-256. O binário gera hashes de `data|nonce` até encontrar um valor com zeros iniciais em hexadecimal (dificuldade).
+![SoloCoinMiner Logo](./solocoinminerlogo.png)
+
+Implementação em C de mineração SHA-256 com modos local, Stratum (pool) e solo via RPC (node). A UI WPF integra controle de modo, carteira local e monitoramento.
+
 =======
 Implementacao em C de mineracao SHA-256 com modos local, Stratum (pool) e solo via RPC (node). A UI WPF integra controle de modo, carteira local e monitoramento.
 >>>>>>> codex/create-readme-for-project-vn5azj

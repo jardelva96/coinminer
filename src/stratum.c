@@ -61,6 +61,9 @@ typedef struct {
     char extranonce1[64];
     int extranonce2_size;
     size_t set_difficulty_count;
+    size_t job_changes;
+    size_t clean_signals;
+    char last_job_id[128];
 } stratum_session_state;
 
 static void skip_ws_local(const char **p) {
@@ -74,6 +77,16 @@ static void process_line(const char *line, size_t len, bitcoin_job *job, size_t 
             if (bitcoin_job_parse_notify(job, line, len)) {
                 printf("[stratum] notify parseado: job_id=%s prevhash=%s merkle_count=%zu clean=%d\n",
                        job->job_id, job->prev_hash, job->merkle_count, job->clean_jobs);
+                if (state) {
+                    if (state->last_job_id[0] == '\0' || strcmp(state->last_job_id, job->job_id) != 0) {
+                        strncpy(state->last_job_id, job->job_id, sizeof(state->last_job_id) - 1);
+                        state->last_job_id[sizeof(state->last_job_id) - 1] = '\0';
+                        state->job_changes++;
+                    }
+                    if (job->clean_jobs) {
+                        state->clean_signals++;
+                    }
+                }
             } else {
                 bitcoin_job_note_notify(job);
                 bitcoin_job_set_last_notify(job, line, len);
@@ -270,6 +283,10 @@ int stratum_run(const stratum_options *opts) {
                 if (session.difficulty > 0.0 || session.extranonce1[0] != '\0') {
                     printf("[stratum] session: difficulty=%.8f (set %zux) extranonce1=%s extranonce2_size=%d\n",
                            session.difficulty, session.set_difficulty_count, session.extranonce1, session.extranonce2_size);
+                }
+                if (session.job_changes > 0 || session.clean_signals > 0) {
+                    printf("[stratum] jobs: changes=%zu clean_signals=%zu last_job_id=%s\n",
+                           session.job_changes, session.clean_signals, session.last_job_id);
                 }
                 last_stats = now;
             }

@@ -94,3 +94,4 @@ Mined blocks: 1
 - Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`) a partir do array `params`.
 - Reconexão com retentativas e atraso configuráveis via `--retries` e `--delay`.
 - Registra `mining.set_difficulty` e o resultado de subscribe (`extranonce1`/`extranonce2_size`) para usar na futura construção de coinbase.
+- Conta trocas de job (`job_id` diferente) e flags `clean_jobs`, exibindo esses números no log periódico para facilitar depuração.

@@ -6,6 +6,8 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(coinminer
   src/main.c
+  src/cli.c
+  src/miner.c
   src/sha256.c
 )
 

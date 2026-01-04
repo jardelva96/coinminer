@@ -28,7 +28,7 @@ static double now_seconds(void) {
 int main(int argc, char **argv) {
     const char *data = (argc >= 2) ? argv[1] : "hello-from-coinminer";
     int difficulty = (argc >= 3) ? atoi(argv[2]) : 4; // zeros em HEX
-    uint64_t max = (argc >= 4) ? (uint64_t)_strtoui64(argv[3], NULL, 10) : 2000000ull;
+    uint64_t max = (argc >= 4) ? (uint64_t)strtoull(argv[3], NULL, 10) : 2000000ull;
 
     printf("Data: \"%s\"\\n", data);
     printf("Difficulty (hex zeros): %d\\n", difficulty);

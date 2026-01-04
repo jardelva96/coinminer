@@ -21,6 +21,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
+
             <UniformGrid Columns="3" Margin="0,0,0,12">
                 <Border Margin="4" Padding="10" Background="#1e293b" CornerRadius="8">
                     <StackPanel>
@@ -45,11 +46,12 @@
                 </Border>
             </UniformGrid>
 
-            <Grid Grid.Row="1" ColumnDefinitions="2*,3*" ColumnSpacing="10">
+            <Grid Grid.Row="1" ColumnSpacing="10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="2*"/>
                     <ColumnDefinition Width="3*"/>
                 </Grid.ColumnDefinitions>
+
                 <Border Grid.Column="0" Padding="12" Background="#1e293b" CornerRadius="8">
                     <StackPanel>
                         <TextBlock Text="Sessão" FontSize="14" FontWeight="SemiBold"/>
@@ -63,6 +65,7 @@
                         </ItemsControl>
                     </StackPanel>
                 </Border>
+
                 <Border Grid.Column="1" Padding="12" Background="#1e293b" CornerRadius="8">
                     <StackPanel>
                         <TextBlock Text="Pools / Stratum" FontSize="14" FontWeight="SemiBold"/>

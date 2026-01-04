@@ -1,66 +1,73 @@
 #include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <time.h>
-#include "sha256.h"
+#include "cli.h"
+#include "common.h"
+#include "miner.h"
+#include "wallet.h"
+#include "stratum.h"
 
-static void hex_print(const uint8_t *buf, size_t n) {
-    for (size_t i = 0; i < n; i++) printf("%02x", buf[i]);
+static void print_run_plan(const run_options *opts) {
+    printf("Data: \"%s\"\n", opts->data);
+    printf("Difficulty (hex zeros): %d\n", opts->difficulty);
+    printf("Max attempts (ignorado, modo infinito): %llu\n", (unsigned long long)opts->max_attempts);
+    printf("Modo: infinito (rodar ate Ctrl+C)\n");
+    printf("Wallet file: %s\n", opts->wallet.path ? opts->wallet.path : DEFAULT_WALLET_PATH);
+    if (opts->wallet.reset) {
+        printf("Reset wallet: enabled (sera recriada antes de minerar)\n");
+    }
+    if (opts->progress_interval > 0) {
+        printf("Progress interval: %llu tentativas\n", (unsigned long long)opts->progress_interval);
+    }
+    printf("Miner will keep running and credit rewards until max attempts are exhausted.\n");
+    printf("\n");
 }
 
-static int has_leading_hex_zeros(const uint8_t hash[SHA256_DIGEST_SIZE], int zeros) {
-    int full_bytes = zeros / 2;
-    int half = zeros % 2;
-
-    for (int i = 0; i < full_bytes; i++) {
-        if (hash[i] != 0x00) return 0;
+static void print_bench_plan(const bench_options *opts) {
+    printf("Benchmarking %llu hashes\n", (unsigned long long)opts->iterations);
+    if (opts->progress_interval > 0) {
+        printf("Progress interval: %llu hashes\n", (unsigned long long)opts->progress_interval);
     }
-    if (half) {
-        if ((hash[full_bytes] & 0xF0) != 0x00) return 0;
-    }
-    return 1;
-}
-
-static double now_seconds(void) {
-    return (double)clock() / (double)CLOCKS_PER_SEC;
+    printf("\n");
 }
 
 int main(int argc, char **argv) {
-    const char *data = (argc >= 2) ? argv[1] : "hello-from-coinminer";
-    int difficulty = (argc >= 3) ? atoi(argv[2]) : 4; // zeros em HEX
-    uint64_t max = (argc >= 4) ? (uint64_t)_strtoui64(argv[3], NULL, 10) : 2000000ull;
-
-    printf("Data: \"%s\"\\n", data);
-    printf("Difficulty (hex zeros): %d\\n", difficulty);
-    printf("Max attempts: %llu\\n\\n", (unsigned long long)max);
-
-    uint8_t hash[SHA256_DIGEST_SIZE];
-    char input[1024];
-
-    double start = now_seconds();
-
-    for (uint64_t i = 0; i < max; i++) {
-        int n = snprintf(input, sizeof(input), "%s|%llu", data, (unsigned long long)i);
-        if (n < 0 || (size_t)n >= sizeof(input)) {
-            fprintf(stderr, "input buffer overflow\\n");
-            return 1;
-        }
-
-        sha256_ctx ctx;
-        sha256_init(&ctx);
-        sha256_update(&ctx, (const uint8_t*)input, (size_t)n);
-        sha256_final(&ctx, hash);
-
-        if (has_leading_hex_zeros(hash, difficulty)) {
-            double t = now_seconds() - start;
-            printf("FOUND!\\nNonce: %llu\\nHash: ", (unsigned long long)i);
-            hex_print(hash, SHA256_DIGEST_SIZE);
-            printf("\\nTime: %.3fs\\n", t);
-            return 0;
-        }
+    cli_result res;
+    if (!parse_command(argc, argv, &res)) {
+        fprintf(stderr, "%s\n\n", res.error[0] ? res.error : "Erro ao interpretar comandos");
+        print_usage(argv[0]);
+        return 1;
     }
 
-    double t = now_seconds() - start;
-    printf("\\nNot found within max attempts. Time: %.3fs\\n", t);
-    return 0;
+    switch (res.type) {
+        case CMD_HELP:
+            print_usage(argv[0]);
+            return 0;
+        case CMD_VERSION:
+            printf("coinminer version %s\n", COINMINER_VERSION);
+            return 0;
+        case CMD_WALLET: {
+            wallet_info info;
+            if (!ensure_wallet(&res.wallet, &info, res.wallet.reset)) return 1;
+            print_wallet(&info);
+            return 0;
+        }
+        case CMD_STRATUM: {
+            stratum_options s = {
+                .host = res.stratum.host,
+                .port = res.stratum.port,
+                .user = res.stratum.user,
+                .password = res.stratum.password
+            };
+            return stratum_run(&s);
+        }
+        case CMD_RUN:
+            print_run_plan(&res.run);
+            return run_miner(&res.run);
+        case CMD_BENCH:
+            print_bench_plan(&res.bench);
+            return run_benchmark(&res.bench);
+        default:
+            fprintf(stderr, "Comando desconhecido\n");
+            print_usage(argv[0]);
+            return 1;
+    }
 }

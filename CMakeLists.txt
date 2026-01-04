@@ -6,11 +6,15 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 add_executable(coinminer
   src/main.c
+  src/cli.c
+  src/miner.c
+  src/stratum.c
+  src/wallet.c
   src/sha256.c
 )
 
 if (MSVC)
-  target_compile_options(coinminer PRIVATE /W4 /O2)
+  target_compile_options(coinminer PRIVATE /W4 /O2 /RTC1-)
 else()
   target_compile_options(coinminer PRIVATE -O2 -Wall -Wextra -Wpedantic)
 endif()

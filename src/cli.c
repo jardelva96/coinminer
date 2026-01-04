@@ -178,7 +178,7 @@ void print_usage(const char *progname) {
     printf("Argumentos run:\n");
     printf("  data             string base concatenada ao nonce (default: %s)\n", DEFAULT_DATA);
     printf("  dificuldade_hex  zeros iniciais em hexadecimal exigidos (0-64, default: %d)\n", DEFAULT_DIFFICULTY);
-    printf("  max_tentativas   limite de nonces testados (>=0, default: %llu; 0 = infinito)\n", (unsigned long long)DEFAULT_MAX_ATTEMPTS);
+    printf("  max_tentativas   ignorado (modo infinito). Campo mantido por compatibilidade; use Ctrl+C para parar.\n");
     printf("  --progress N     exibe progresso e hashrate a cada N tentativas (opcional)\n");
     printf("  --infinite       atalho para max_tentativas=0 (roda ate Ctrl+C)\n");
     printf("  --wallet caminho arquivo da carteira (default: %s)\n", DEFAULT_WALLET_PATH);

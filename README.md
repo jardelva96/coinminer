@@ -21,10 +21,8 @@ cmake --build build
 ```bash
 # Sintaxe: ./coinminer <comando> [opções]
 
-# Executar o minerador (opcional: --progress 50000). Default: mineracao infinita (max_tentativas=0).
+# Executar o minerador (opcional: --progress 50000). Modo sempre infinito (pare com Ctrl+C).
 ./build/coinminer run "hello" 4 0 --progress 50000
-# Se quiser limite finito, informe max_tentativas > 0
-./build/coinminer run "hello" 4 2000000 --progress 50000
 
 # Benchmark (medir hashrate)
 ./build/coinminer bench 500000 --progress 100000
@@ -42,7 +40,7 @@ cmake --build build
 ### Parâmetros
 - `data`: string base que será concatenada com o nonce.
 - `dificuldade_hex`: número de zeros à esquerda (em hexadecimal) exigidos no hash (0-64).
-- `max_tentativas`: limite de nonces testados antes de abortar (>= 0). `0` (default) ativa mineracao infinita (pare com Ctrl+C). O miner continua apos cada bloco encontrado ate atingir o limite ou ser interrompido.
+- `max_tentativas`: ignorado (modo infinito). Parar apenas manualmente com Ctrl+C.
 - `iteracoes`: quantidade de hashes para medir hashrate (benchmark), default 500000.
 - `--progress N`: exibe progresso a cada `N` tentativas (run) ou hashes (bench).
 - `--wallet caminho`: define o arquivo de carteira (default: `wallet.dat`).

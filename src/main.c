@@ -7,10 +7,8 @@
 static void print_run_plan(const run_options *opts) {
     printf("Data: \"%s\"\n", opts->data);
     printf("Difficulty (hex zeros): %d\n", opts->difficulty);
-    printf("Max attempts: %llu\n", (unsigned long long)opts->max_attempts);
-    if (opts->max_attempts == MAX_ATTEMPTS_INFINITE) {
-        printf("Modo: infinito (rodar ate Ctrl+C)\n");
-    }
+    printf("Max attempts (ignorado, modo infinito): %llu\n", (unsigned long long)opts->max_attempts);
+    printf("Modo: infinito (rodar ate Ctrl+C)\n");
     printf("Wallet file: %s\n", opts->wallet.path ? opts->wallet.path : DEFAULT_WALLET_PATH);
     if (opts->wallet.reset) {
         printf("Reset wallet: enabled (sera recriada antes de minerar)\n");

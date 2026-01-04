@@ -62,8 +62,11 @@ int run_miner(const run_options *opts) {
 
     double start = now_seconds();
 
-    for (uint64_t i = 0; opts->max_attempts == MAX_ATTEMPTS_INFINITE || i < opts->max_attempts; i++) {
-        if (stop_flag) break;
+    for (uint64_t i = 0; ; i++) {
+        if (stop_flag) {
+            attempts_done = i;
+            break;
+        }
         int n = snprintf(input, sizeof(input), "%s|%llu", opts->data, (unsigned long long)i);
         if (n < 0 || (size_t)n >= sizeof(input)) {
             fprintf(stderr, "input buffer overflow\n");
@@ -99,11 +102,7 @@ int run_miner(const run_options *opts) {
 
     double elapsed = now_seconds() - start;
     double hash_rate = (elapsed > 0.0) ? (double)attempts_done / elapsed : 0.0;
-    if (opts->max_attempts == MAX_ATTEMPTS_INFINITE) {
-        printf("\nMineracao interrompida manualmente (modo infinito).\n");
-    } else {
-        printf("\nMineracao encerrada apos %llu tentativas.\n", (unsigned long long)opts->max_attempts);
-    }
+    printf("\nMineracao interrompida manualmente (modo infinito).\n");
     printf("Time: %.3fs | Hashrate medio: %.2f H/s\n", elapsed, hash_rate);
     printf("Blocos encontrados nesta sessao: %llu\n", (unsigned long long)found_blocks);
     printf("Carteira apos a sessao:\n");

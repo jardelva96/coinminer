@@ -17,6 +17,8 @@ static void set_default_stratum(stratum_options *s) {
     s->port = NULL;
     s->user = NULL;
     s->password = NULL;
+    s->max_reconnects = 5;
+    s->reconnect_delay_secs = 5;
 }
 
 static int parse_int_range(const char *arg, int min, int max, int *out) {
@@ -76,6 +78,20 @@ static int parse_stratum(int argc, char **argv, cli_result *res) {
     res->stratum.port = argv[3];
     if (argc >= 5) res->stratum.user = argv[4];
     if (argc >= 6) res->stratum.password = argv[5];
+
+    for (int i = 6; i < argc; i++) {
+        if (strcmp(argv[i], "--retries") == 0 && i + 1 < argc) {
+            int v = atoi(argv[i + 1]);
+            if (v < 0) v = 0;
+            res->stratum.max_reconnects = v;
+            i++;
+        } else if (strcmp(argv[i], "--delay") == 0 && i + 1 < argc) {
+            int v = atoi(argv[i + 1]);
+            if (v < 1) v = 1;
+            res->stratum.reconnect_delay_secs = v;
+            i++;
+        }
+    }
     res->type = CMD_STRATUM;
     return 1;
 }
@@ -214,7 +230,7 @@ void print_usage(const char *progname) {
     printf("  %s run [data] [dificuldade_hex] [max_tentativas] [--progress N] [--infinite]\n", progname);
     printf("  %s bench [iteracoes] [--progress N]\n", progname);
     printf("  %s wallet [--wallet caminho] [--reset-wallet]\n", progname);
-    printf("  %s stratum <host> <port> <user> [password]\n", progname);
+    printf("  %s stratum <host> <port> <user> [password] [--retries N] [--delay SECS]\n", progname);
     printf("  %s help\n", progname);
     printf("  %s version\n\n", progname);
     printf("Argumentos run:\n");

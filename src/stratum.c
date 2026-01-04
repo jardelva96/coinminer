@@ -107,75 +107,99 @@ int stratum_run(const stratum_options *opts) {
     signal(SIGTERM, handle_stop);
 #endif
 
-    int sock = connect_tcp(opts->host, opts->port);
-    if (sock == -1) return 1;
-
-    printf("[stratum] conectado a %s:%s\n", opts->host, opts->port);
-
-    size_t bytes_out = 0;
-    size_t bytes_in = 0;
-    char subscribe[256];
-    snprintf(subscribe, sizeof(subscribe), "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[]}");
-    if (!send_line(sock, subscribe)) {
-        fprintf(stderr, "[stratum] falha ao enviar subscribe\n");
-        close(sock);
-        return 1;
-    }
-    bytes_out += strlen(subscribe) + 1;
-    recv_lines(sock, NULL, &bytes_in);
-
-    char authorize[512];
-    snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
-             opts->user ? opts->user : "", opts->password ? opts->password : "x");
-    if (!send_line(sock, authorize)) {
-        fprintf(stderr, "[stratum] falha ao enviar authorize\n");
-        close(sock);
-        return 1;
-    }
-    bytes_out += strlen(authorize) + 1;
-    printf("[stratum] aguardando mensagens (Ctrl+C para sair)...\n");
-
-    size_t notify_count = 0;
-    time_t last_ping = time(NULL);
-    time_t last_stats = time(NULL);
-
+    int attempts = 0;
     while (!stop_flag) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(sock, &fds);
-        struct timeval tv;
-        tv.tv_sec = 5;
-        tv.tv_usec = 0;
-        int sel = select(sock + 1, &fds, NULL, NULL, &tv);
-        if (sel < 0) {
-            perror("[stratum] select");
-            break;
-        } else if (sel == 0) {
-            time_t now = time(NULL);
-            if (now - last_ping >= 30) {
-                if (!send_ping(sock)) {
-                    fprintf(stderr, "[stratum] falha ao enviar ping\n");
-                    break;
-                }
-                last_ping = now;
+        int sock = connect_tcp(opts->host, opts->port);
+        if (sock == -1) {
+            attempts++;
+            if (opts->max_reconnects >= 0 && attempts > opts->max_reconnects) {
+                fprintf(stderr, "[stratum] conexao falhou apos %d tentativas\n", attempts);
+                return 1;
             }
+            fprintf(stderr, "[stratum] tentando reconectar em %d segundos...\n", opts->reconnect_delay_secs);
+            sleep((unsigned int)opts->reconnect_delay_secs);
             continue;
         }
 
-        if (!recv_lines(sock, &notify_count, &bytes_in)) {
-            fprintf(stderr, "[stratum] conexao encerrada\n");
-            break;
+        printf("[stratum] conectado a %s:%s (tentativa %d)\n", opts->host, opts->port, attempts + 1);
+        attempts = 0;
+
+        size_t bytes_out = 0;
+        size_t bytes_in = 0;
+        size_t notify_count = 0;
+        char subscribe[256];
+        snprintf(subscribe, sizeof(subscribe), "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[]}");
+        if (!send_line(sock, subscribe)) {
+            fprintf(stderr, "[stratum] falha ao enviar subscribe\n");
+            close(sock);
+            goto wait_reconnect;
+        }
+        bytes_out += strlen(subscribe) + 1;
+        recv_lines(sock, NULL, &bytes_in);
+
+        char authorize[512];
+        snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
+                 opts->user ? opts->user : "", opts->password ? opts->password : "x");
+        if (!send_line(sock, authorize)) {
+            fprintf(stderr, "[stratum] falha ao enviar authorize\n");
+            close(sock);
+            goto wait_reconnect;
+        }
+        bytes_out += strlen(authorize) + 1;
+        printf("[stratum] aguardando mensagens (Ctrl+C para sair)...\n");
+
+        time_t last_ping = time(NULL);
+        time_t last_stats = time(NULL);
+
+        while (!stop_flag) {
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(sock, &fds);
+            struct timeval tv;
+            tv.tv_sec = 5;
+            tv.tv_usec = 0;
+            int sel = select(sock + 1, &fds, NULL, NULL, &tv);
+            if (sel < 0) {
+                perror("[stratum] select");
+                break;
+            } else if (sel == 0) {
+                time_t now = time(NULL);
+                if (now - last_ping >= 30) {
+                    if (!send_ping(sock)) {
+                        fprintf(stderr, "[stratum] falha ao enviar ping\n");
+                        break;
+                    }
+                    bytes_out += 1;  // aprox
+                    last_ping = now;
+                }
+                continue;
+            }
+
+            if (!recv_lines(sock, &notify_count, &bytes_in)) {
+                fprintf(stderr, "[stratum] conexao encerrada\n");
+                break;
+            }
+
+            time_t now = time(NULL);
+            if (now - last_stats >= 30) {
+                printf("[stratum] stats: notify=%zu | bytes_in=%zu | bytes_out=%zu\n",
+                       notify_count, bytes_in, bytes_out);
+                last_stats = now;
+            }
         }
 
-        time_t now = time(NULL);
-        if (now - last_stats >= 30) {
-            printf("[stratum] stats: notify=%zu | bytes_in=%zu | bytes_out=%zu\n",
-                   notify_count, bytes_in, bytes_out);
-            last_stats = now;
+        printf("[stratum] finalizado. Notifies recebidas: %zu\n", notify_count);
+        close(sock);
+
+wait_reconnect:
+        if (stop_flag) break;
+        attempts++;
+        if (opts->max_reconnects >= 0 && attempts > opts->max_reconnects) {
+            fprintf(stderr, "[stratum] limite de reconexoes atingido (%d)\n", opts->max_reconnects);
+            return 1;
         }
+        printf("[stratum] reconectando em %d segundos (tentativa %d)...\n", opts->reconnect_delay_secs, attempts + 1);
+        sleep((unsigned int)opts->reconnect_delay_secs);
     }
-
-    printf("[stratum] finalizado. Notifies recebidas: %zu\n", notify_count);
-    close(sock);
     return 0;
 }

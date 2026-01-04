@@ -7,6 +7,8 @@ typedef struct stratum_options {
     const char *port;
     const char *user;
     const char *password;
+    int max_reconnects;
+    int reconnect_delay_secs;
 } stratum_options;
 
 #define COINMINER_VERSION "0.4.0"

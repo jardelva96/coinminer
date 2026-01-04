@@ -45,5 +45,5 @@ Max attempts: 2000000
 FOUND!
 Nonce: 34677
 Hash: 0000a1c3...
-Time: 0.527s
+Time: 0.527s | Hashrate: 65.82 H/s
 ```

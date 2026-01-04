@@ -57,6 +57,41 @@ static int parse_max_attempts(const char *arg, uint64_t *max_attempts) {
     return 1;
 }
 
+static int run_miner(const char *data, int difficulty, uint64_t max) {
+    uint8_t hash[SHA256_DIGEST_SIZE];
+    char input[1024];
+
+    double start = now_seconds();
+
+    for (uint64_t i = 0; i < max; i++) {
+        int n = snprintf(input, sizeof(input), "%s|%llu", data, (unsigned long long)i);
+        if (n < 0 || (size_t)n >= sizeof(input)) {
+            fprintf(stderr, "input buffer overflow\n");
+            return 1;
+        }
+
+        sha256_ctx ctx;
+        sha256_init(&ctx);
+        sha256_update(&ctx, (const uint8_t*)input, (size_t)n);
+        sha256_final(&ctx, hash);
+
+        if (has_leading_hex_zeros(hash, difficulty)) {
+            double elapsed = now_seconds() - start;
+            double hash_rate = (elapsed > 0.0) ? (double)(i + 1) / elapsed : 0.0;
+            printf("FOUND!\nNonce: %llu\nHash: ", (unsigned long long)i);
+            hex_print(hash, SHA256_DIGEST_SIZE);
+            printf("\nTime: %.3fs | Hashrate: %.2f H/s\n", elapsed, hash_rate);
+            return 0;
+        }
+    }
+
+    double elapsed = now_seconds() - start;
+    double hash_rate = (elapsed > 0.0) ? (double)max / elapsed : 0.0;
+    printf("\nNot found within max attempts.\n");
+    printf("Time: %.3fs | Hashrate: %.2f H/s\n", elapsed, hash_rate);
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
@@ -88,37 +123,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("Data: \"%s\"\\n", data);
-    printf("Difficulty (hex zeros): %d\\n", difficulty);
-    printf("Max attempts: %llu\\n\\n", (unsigned long long)max);
+    printf("Data: \"%s\"\n", data);
+    printf("Difficulty (hex zeros): %d\n", difficulty);
+    printf("Max attempts: %llu\n\n", (unsigned long long)max);
 
-    uint8_t hash[SHA256_DIGEST_SIZE];
-    char input[1024];
-
-    double start = now_seconds();
-
-    for (uint64_t i = 0; i < max; i++) {
-        int n = snprintf(input, sizeof(input), "%s|%llu", data, (unsigned long long)i);
-        if (n < 0 || (size_t)n >= sizeof(input)) {
-            fprintf(stderr, "input buffer overflow\\n");
-            return 1;
-        }
-
-        sha256_ctx ctx;
-        sha256_init(&ctx);
-        sha256_update(&ctx, (const uint8_t*)input, (size_t)n);
-        sha256_final(&ctx, hash);
-
-        if (has_leading_hex_zeros(hash, difficulty)) {
-            double t = now_seconds() - start;
-            printf("FOUND!\\nNonce: %llu\\nHash: ", (unsigned long long)i);
-            hex_print(hash, SHA256_DIGEST_SIZE);
-            printf("\\nTime: %.3fs\\n", t);
-            return 0;
-        }
-    }
-
-    double t = now_seconds() - start;
-    printf("\\nNot found within max attempts. Time: %.3fs\\n", t);
-    return 0;
+    return run_miner(data, difficulty, max);
 }

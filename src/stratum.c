@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <time.h>
 
 static int connect_tcp(const char *host, const char *port) {
     struct addrinfo hints;
@@ -46,21 +47,56 @@ static int send_line(int sock, const char *msg) {
     return 1;
 }
 
-static int recv_and_print(int sock) {
-    char buf[2048];
-    ssize_t n = recv(sock, buf, sizeof(buf) - 1, 0);
-    if (n <= 0) return 0;
-    buf[n] = '\0';
-    printf("[stratum] recv (%zd bytes):\n%s\n", n, buf);
-    fflush(stdout);
-    return 1;
-}
-
 static volatile sig_atomic_t stop_flag = 0;
 
 static void handle_stop(int sig) {
     (void)sig;
     stop_flag = 1;
+}
+
+static void process_line(const char *line, size_t len, size_t *notify_count) {
+    printf("[stratum] recv line (%zu bytes): %.*s\n", len, (int)len, line);
+    if (strstr(line, "mining.notify") != NULL) {
+        (*notify_count)++;
+        printf("[stratum] notify recebido (%zu no total)\n", *notify_count);
+    }
+}
+
+static int recv_lines(int sock, size_t *notify_count) {
+    char buf[4096];
+    ssize_t n = recv(sock, buf, sizeof(buf), 0);
+    if (n <= 0) return 0;
+
+    static char stash[8192];
+    static size_t stash_len = 0;
+
+    if ((size_t)n + stash_len >= sizeof(stash)) {
+        stash_len = 0;  // drop overflow
+    }
+    memcpy(stash + stash_len, buf, (size_t)n);
+    stash_len += (size_t)n;
+
+    size_t start = 0;
+    for (size_t i = 0; i < stash_len; i++) {
+        if (stash[i] == '\n') {
+            size_t line_len = i - start;
+            if (line_len > 0 && stash[start + line_len - 1] == '\r') line_len--;
+            process_line(stash + start, line_len, notify_count ? notify_count : &(size_t){0});
+            start = i + 1;
+        }
+    }
+    if (start > 0) {
+        memmove(stash, stash + start, stash_len - start);
+        stash_len -= start;
+    }
+    return 1;
+}
+
+static int send_ping(int sock) {
+    const char *ping = "{\"id\":999,\"method\":\"mining.ping\",\"params\":[]}\n";
+    if (send(sock, ping, strlen(ping), 0) < 0) return 0;
+    printf("[stratum] ping enviado\n");
+    return 1;
 }
 
 int stratum_run(const stratum_options *opts) {
@@ -81,7 +117,7 @@ int stratum_run(const stratum_options *opts) {
         close(sock);
         return 1;
     }
-    recv_and_print(sock);
+    recv_lines(sock, NULL);
 
     char authorize[512];
     snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
@@ -91,17 +127,41 @@ int stratum_run(const stratum_options *opts) {
         close(sock);
         return 1;
     }
-    recv_and_print(sock);
-
     printf("[stratum] aguardando mensagens (Ctrl+C para sair)...\n");
+
+    size_t notify_count = 0;
+    time_t last_ping = time(NULL);
+
     while (!stop_flag) {
-        if (!recv_and_print(sock)) {
+        fd_set fds;
+        FD_ZERO(&fds);
+        FD_SET(sock, &fds);
+        struct timeval tv;
+        tv.tv_sec = 5;
+        tv.tv_usec = 0;
+        int sel = select(sock + 1, &fds, NULL, NULL, &tv);
+        if (sel < 0) {
+            perror("[stratum] select");
+            break;
+        } else if (sel == 0) {
+            time_t now = time(NULL);
+            if (now - last_ping >= 30) {
+                if (!send_ping(sock)) {
+                    fprintf(stderr, "[stratum] falha ao enviar ping\n");
+                    break;
+                }
+                last_ping = now;
+            }
+            continue;
+        }
+
+        if (!recv_lines(sock, &notify_count)) {
             fprintf(stderr, "[stratum] conexao encerrada\n");
             break;
         }
     }
 
-    printf("[stratum] finalizado.\n");
+    printf("[stratum] finalizado. Notifies recebidas: %zu\n", notify_count);
     close(sock);
     return 0;
 }

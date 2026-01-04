@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
+#include <errno.h>
 #include "sha256.h"
 
 static void hex_print(const uint8_t *buf, size_t n) {
@@ -27,16 +28,44 @@ static double now_seconds(void) {
 }
 
 static void print_usage(const char *progname) {
-    printf("Uso: %s run [data] [dificuldade_hex] [max_tentativas]\n", progname);
-    printf("  data             string base que sera concatenada ao nonce (default: hello-from-coinminer)\n");
-    printf("  dificuldade_hex  zeros iniciais em hexadecimal exigidos (default: 4)\n");
-    printf("  max_tentativas   limite de nonces testados (default: 2000000)\n");
+    printf("Uso:\n");
+    printf("  %s run [data] [dificuldade_hex] [max_tentativas]\n", progname);
+    printf("  %s help\n\n", progname);
+    printf("Argumentos:\n");
+    printf("  data             string base concatenada ao nonce (default: hello-from-coinminer)\n");
+    printf("  dificuldade_hex  zeros iniciais em hexadecimal exigidos (0-64, default: 4)\n");
+    printf("  max_tentativas   limite de nonces testados (>=1, default: 2000000)\n");
+}
+
+static int parse_difficulty(const char *arg, int *difficulty) {
+    char *end = NULL;
+    errno = 0;
+    long val = strtol(arg, &end, 10);
+    if (errno != 0 || end == arg || *end != '\0') return 0;
+    if (val < 0 || val > 64) return 0; // 64 hex zeros == 256 bits
+    *difficulty = (int)val;
+    return 1;
+}
+
+static int parse_max_attempts(const char *arg, uint64_t *max_attempts) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long val = strtoull(arg, &end, 10);
+    if (errno != 0 || end == arg || *end != '\0') return 0;
+    if (val == 0ull) return 0;
+    *max_attempts = (uint64_t)val;
+    return 1;
 }
 
 int main(int argc, char **argv) {
     if (argc < 2) {
         print_usage(argv[0]);
         return 1;
+    }
+
+    if (strcmp(argv[1], "help") == 0) {
+        print_usage(argv[0]);
+        return 0;
     }
 
     if (strcmp(argv[1], "run") != 0) {
@@ -46,8 +75,18 @@ int main(int argc, char **argv) {
     }
 
     const char *data = (argc >= 3) ? argv[2] : "hello-from-coinminer";
-    int difficulty = (argc >= 4) ? atoi(argv[3]) : 4; // zeros em HEX
-    uint64_t max = (argc >= 5) ? (uint64_t)strtoull(argv[4], NULL, 10) : 2000000ull;
+    int difficulty = 4; // zeros em HEX
+    uint64_t max = 2000000ull;
+
+    if (argc >= 4 && !parse_difficulty(argv[3], &difficulty)) {
+        fprintf(stderr, "Dificuldade invalida: %s (use um inteiro entre 0 e 64)\n", argv[3]);
+        return 1;
+    }
+
+    if (argc >= 5 && !parse_max_attempts(argv[4], &max)) {
+        fprintf(stderr, "Max tentativas invalido: %s (use um inteiro >= 1)\n", argv[4]);
+        return 1;
+    }
 
     printf("Data: \"%s\"\\n", data);
     printf("Difficulty (hex zeros): %d\\n", difficulty);

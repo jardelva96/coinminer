@@ -1,0 +1,81 @@
+<Window x:Class="Coinminer.Ui.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Coinminer UI (Preview)" Height="480" Width="800"
+        Background="#0f172a" Foreground="#e2e8f0">
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="SpaceBetween">
+            <StackPanel>
+                <TextBlock Text="Coinminer Dashboard (mock)" FontSize="22" FontWeight="Bold"/>
+                <TextBlock Text="Protótipo em C# / WPF para futura integração com o backend C."
+                           Foreground="#94a3b8" FontSize="12"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,12,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <UniformGrid Columns="3" Margin="0,0,0,12">
+                <Border Margin="4" Padding="10" Background="#1e293b" CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="Saldo" Foreground="#94a3b8" FontSize="12"/>
+                        <TextBlock Text="58,650 coins" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock Text="Addr: 57d8b6...7557" Foreground="#94a3b8" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+                <Border Margin="4" Padding="10" Background="#1e293b" CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="Blocos" Foreground="#94a3b8" FontSize="12"/>
+                        <TextBlock Text="2,423" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock Text="+1,173 na sessão" Foreground="#94a3b8" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+                <Border Margin="4" Padding="10" Background="#1e293b" CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="Hashrate" Foreground="#94a3b8" FontSize="12"/>
+                        <TextBlock Text="1,934,231 H/s" FontSize="20" FontWeight="Bold"/>
+                        <TextBlock Text="Últimos 30s" Foreground="#94a3b8" FontSize="12"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <Grid Grid.Row="1" ColumnDefinitions="2*,3*" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="3*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Padding="12" Background="#1e293b" CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="Sessão" FontSize="14" FontWeight="SemiBold"/>
+                        <ItemsControl Margin="0,8,0,0">
+                            <ItemsControl.Items>
+                                <TextBlock Text="Tentativas: 76,000,000"/>
+                                <TextBlock Text="Nonce: 77024410"/>
+                                <TextBlock Text="Tempo: 39.8s"/>
+                                <TextBlock Text="Reward sessão: +58,800"/>
+                            </ItemsControl.Items>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Padding="12" Background="#1e293b" CornerRadius="8">
+                    <StackPanel>
+                        <TextBlock Text="Pools / Stratum" FontSize="14" FontWeight="SemiBold"/>
+                        <ItemsControl Margin="0,8,0,0">
+                            <ItemsControl.Items>
+                                <TextBlock Text="pool1.example.com:3333 (BTC) diff=1024 job_id=abc123"/>
+                                <TextBlock Text="pool2.example.com:4444 (LTC) aguardando authorize..."/>
+                                <TextBlock Text="pool3.example.com:5555 (DOGE) reconectando (tentativa 3)"/>
+                            </ItemsControl.Items>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

@@ -96,3 +96,7 @@ Mined blocks: 1
 - Registra `mining.set_difficulty` e o resultado de subscribe (`extranonce1`/`extranonce2_size`) para usar na futura construção de coinbase.
 - Conta trocas de job (`job_id` diferente) e flags `clean_jobs`, exibindo esses números no log periódico para facilitar depuração.
 - Quando há `extranonce1` e `merkle_branch`, calcula e exibe a merkle root usando uma `extranonce2` de zeros (tamanho informado pelo pool) para facilitar debug antes da submissão real.
+
+## Interface (futuro, em C#)
+- A pasta `ui/` agora contém um projeto WPF (`Coinminer.Ui.csproj`) com um layout estático de dashboard (mock) para futura integração com o backend.
+- Abra `ui/Coinminer.Ui.sln` no Visual Studio para visualizar/rodar o protótipo; não há conexão com o minerador em C ainda.

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 #include "sha256.h"
 
 static void hex_print(const uint8_t *buf, size_t n) {
@@ -25,10 +26,28 @@ static double now_seconds(void) {
     return (double)clock() / (double)CLOCKS_PER_SEC;
 }
 
+static void print_usage(const char *progname) {
+    printf("Uso: %s run [data] [dificuldade_hex] [max_tentativas]\n", progname);
+    printf("  data             string base que sera concatenada ao nonce (default: hello-from-coinminer)\n");
+    printf("  dificuldade_hex  zeros iniciais em hexadecimal exigidos (default: 4)\n");
+    printf("  max_tentativas   limite de nonces testados (default: 2000000)\n");
+}
+
 int main(int argc, char **argv) {
-    const char *data = (argc >= 2) ? argv[1] : "hello-from-coinminer";
-    int difficulty = (argc >= 3) ? atoi(argv[2]) : 4; // zeros em HEX
-    uint64_t max = (argc >= 4) ? (uint64_t)strtoull(argv[3], NULL, 10) : 2000000ull;
+    if (argc < 2) {
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    if (strcmp(argv[1], "run") != 0) {
+        fprintf(stderr, "Comando desconhecido: %s\n\n", argv[1]);
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    const char *data = (argc >= 3) ? argv[2] : "hello-from-coinminer";
+    int difficulty = (argc >= 4) ? atoi(argv[3]) : 4; // zeros em HEX
+    uint64_t max = (argc >= 5) ? (uint64_t)strtoull(argv[4], NULL, 10) : 2000000ull;
 
     printf("Data: \"%s\"\\n", data);
     printf("Difficulty (hex zeros): %d\\n", difficulty);

@@ -17,14 +17,19 @@ cmake --build build
 
 ## Uso
 ```bash
-# Sintaxe: ./coinminer <data> <dificuldade_hex> <max_tentativas>
-./build/coinminer "hello" 4 2000000
+# Sintaxe: ./coinminer run [data] [dificuldade_hex] [max_tentativas]
+./build/coinminer run "hello" 4 2000000
 ```
 
 ### Parâmetros
 - `data`: string base que será concatenada com o nonce.
 - `dificuldade_hex`: número de zeros à esquerda (em hexadecimal) exigidos no hash.
 - `max_tentativas`: limite de nonces testados antes de abortar.
+
+Se nenhum parâmetro for informado, o comando `./coinminer run` usa:
+- `data` = `hello-from-coinminer`
+- `dificuldade_hex` = `4`
+- `max_tentativas` = `2000000`
 
 ## Exemplo de saída
 ```

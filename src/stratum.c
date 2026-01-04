@@ -188,8 +188,11 @@ int stratum_run(const stratum_options *opts) {
 
             time_t now = time(NULL);
             if (now - last_stats >= 30) {
-                printf("[stratum] stats: notify=%zu | bytes_in=%zu | bytes_out=%zu\n",
-                       notify_count, bytes_in, bytes_out);
+                printf("[stratum] stats: coin=%s | notify=%zu | bytes_in=%zu | bytes_out=%zu\n",
+                       coin_type_to_name(opts->coin), notify_count, bytes_in, bytes_out);
+                if (job.last_notify[0] != '\0') {
+                    printf("[stratum] last notify: %s\n", job.last_notify);
+                }
                 last_stats = now;
             }
         }

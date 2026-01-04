@@ -31,7 +31,7 @@ cmake --build build
 ./build/coinminer wallet --wallet wallet.dat
 
 # Testar Stratum (subscribe/authorize basico)
-./build/coinminer stratum pool.exemplo.com 3333 worker userpass
+./build/coinminer stratum pool.exemplo.com 3333 worker userpass --coin bitcoin
 
 # Versão
 ./build/coinminer version

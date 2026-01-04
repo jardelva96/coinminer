@@ -22,6 +22,14 @@ static void set_default_stratum(stratum_options *s) {
     s->coin = COIN_BTC;
 }
 
+static void set_default_solo(solo_options *s) {
+    s->host = NULL;
+    s->port = NULL;
+    s->user = NULL;
+    s->password = NULL;
+    s->coin = COIN_BTC;
+}
+
 static int parse_int_range(const char *arg, int min, int max, int *out) {
     char *end = NULL;
     errno = 0;
@@ -97,6 +105,27 @@ static int parse_stratum(int argc, char **argv, cli_result *res) {
         }
     }
     res->type = CMD_STRATUM;
+    return 1;
+}
+
+static int parse_solo(int argc, char **argv, cli_result *res) {
+    set_default_solo(&res->solo);
+    if (argc < 6) {
+        snprintf(res->error, sizeof(res->error), "Uso: %s solo <host> <port> <user> <password> [--coin NAME]", argv[0]);
+        return 0;
+    }
+    res->solo.host = argv[2];
+    res->solo.port = argv[3];
+    res->solo.user = argv[4];
+    res->solo.password = argv[5];
+
+    for (int i = 6; i < argc; i++) {
+        if (strcmp(argv[i], "--coin") == 0 && i + 1 < argc) {
+            res->solo.coin = coin_type_from_name(argv[i + 1]);
+            i++;
+        }
+    }
+    res->type = CMD_SOLO;
     return 1;
 }
 
@@ -198,6 +227,7 @@ int parse_command(int argc, char **argv, cli_result *out) {
     set_default_bench(&out->bench);
     set_default_wallet(&out->wallet);
     set_default_stratum(&out->stratum);
+    set_default_solo(&out->solo);
 
     if (argc < 2) {
         snprintf(out->error, sizeof(out->error), "Nenhum comando informado");
@@ -224,6 +254,9 @@ int parse_command(int argc, char **argv, cli_result *out) {
     if (strcmp(argv[1], "stratum") == 0) {
         return parse_stratum(argc, argv, out);
     }
+    if (strcmp(argv[1], "solo") == 0) {
+        return parse_solo(argc, argv, out);
+    }
 
     snprintf(out->error, sizeof(out->error), "Comando desconhecido: %s", argv[1]);
     return 0;
@@ -235,6 +268,7 @@ void print_usage(const char *progname) {
     printf("  %s bench [iteracoes] [--progress N]\n", progname);
     printf("  %s wallet [--wallet caminho] [--reset-wallet]\n", progname);
     printf("  %s stratum <host> <port> <user> [password] [--retries N] [--delay SECS] [--coin NAME]\n", progname);
+    printf("  %s solo <host> <port> <user> <password> [--coin NAME]\n", progname);
     printf("  %s help\n", progname);
     printf("  %s version\n\n", progname);
     printf("Argumentos run:\n");
@@ -253,4 +287,6 @@ void print_usage(const char *progname) {
     printf("  --reset-wallet   recria carteira e zera saldo/mineracao\n");
     printf("Comando stratum:\n");
     printf("  host/port/user/(password) para testar subscribe/authorize em um pool Stratum (fluxo basico)\n");
+    printf("Comando solo:\n");
+    printf("  host/port/user/password para usar getblocktemplate em um node local via RPC\n");
 }

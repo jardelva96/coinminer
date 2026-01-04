@@ -8,6 +8,7 @@ add_executable(coinminer
   src/main.c
   src/cli.c
   src/miner.c
+  src/solo.c
   src/stratum.c
   src/coins/registry.c
   src/bitcoin/block.c

@@ -14,6 +14,14 @@ typedef struct stratum_options {
     coin_type coin;
 } stratum_options;
 
+typedef struct solo_options {
+    const char *host;
+    const char *port;
+    const char *user;
+    const char *password;
+    coin_type coin;
+} solo_options;
+
 #define COINMINER_VERSION "0.4.0"
 
 #define DEFAULT_DATA "hello-from-coinminer"
@@ -30,6 +38,7 @@ typedef enum {
     CMD_BENCH,
     CMD_WALLET,
     CMD_STRATUM,
+    CMD_SOLO,
     CMD_HELP,
     CMD_VERSION,
     CMD_UNKNOWN
@@ -59,6 +68,7 @@ typedef struct {
     bench_options bench;
     wallet_options wallet;
     stratum_options stratum;
+    solo_options solo;
     char error[160];
 } cli_result;
 

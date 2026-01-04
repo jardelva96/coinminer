@@ -4,6 +4,7 @@
 #include "miner.h"
 #include "wallet.h"
 #include "stratum.h"
+#include "solo.h"
 
 static void print_run_plan(const run_options *opts) {
     printf("Data: \"%s\"\n", opts->data);
@@ -58,6 +59,16 @@ int main(int argc, char **argv) {
                 .password = res.stratum.password
             };
             return stratum_run(&s);
+        }
+        case CMD_SOLO: {
+            solo_options s = {
+                .host = res.solo.host,
+                .port = res.solo.port,
+                .user = res.solo.user,
+                .password = res.solo.password,
+                .coin = res.solo.coin
+            };
+            return solo_run(&s);
         }
         case CMD_RUN:
             print_run_plan(&res.run);

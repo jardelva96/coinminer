@@ -1,6 +1,6 @@
-# coinminer (SHA-256 + PoW local)
+# coinminer (SHA-256 + PoW local, Stratum, Solo RPC)
 
-Implementação simples de prova-de-trabalho em C usando SHA-256. O binário gera hashes de `data|nonce` até encontrar um valor com zeros iniciais em hexadecimal (dificuldade).
+Implementacao em C de mineracao SHA-256 com modos local, Stratum (pool) e solo via RPC (node). A UI WPF integra controle de modo, carteira local e monitoramento.
 
 ## Requisitos
 - CMake 3.16+
@@ -14,12 +14,10 @@ cmake --build build
 ```
 
 > No Windows, execute os comandos acima no PowerShell dentro de um Developer Prompt do Visual Studio Build Tools.
-> Se você já gerou a pasta `build` com outro generator (ex.: Visual Studio), apague `build/` antes de trocar para Ninja ou use outro diretório (ex.: `build-ninja`). Caso contrário o CMake reclamará de generator diferente e pode misturar flags (ex.: `/O2` com `/RTC1`).
-> Para continuar com o generator anterior, execute o mesmo `-G` que foi usado da primeira vez (ex.: `-G \"Visual Studio 17 2022\"`) ou remova `CMakeCache.txt` e a pasta `CMakeFiles` dentro de `build/`.
 
-## Uso
+## Uso (CLI)
 ```bash
-# Sintaxe: ./coinminer <comando> [opções]
+# Sintaxe: ./coinminer <comando> [opcoes]
 
 # Executar o minerador (opcional: --progress 50000). Modo sempre infinito (pare com Ctrl+C).
 ./build/coinminer run "hello" 4 0 --progress 50000
@@ -30,73 +28,42 @@ cmake --build build
 # Carteira (criar/mostrar saldo)
 ./build/coinminer wallet --wallet wallet.dat
 
-# Testar Stratum (subscribe/authorize + notify parsing)
+# Stratum (pool) com SHA-256 + submit de shares
 ./build/coinminer stratum pool.exemplo.com 3333 worker userpass --coin bitcoin
 
-# Versão
+# Solo via RPC (node local)
+./build/coinminer solo 127.0.0.1 8332 rpcuser rpcpass --coin bitcoin
+
+# Versao
 ./build/coinminer version
 
 # Ajuda
 ./build/coinminer help
 ```
 
-### Parâmetros
-- `data`: string base que será concatenada com o nonce.
-- `dificuldade_hex`: número de zeros à esquerda (em hexadecimal) exigidos no hash (0-64).
-- `max_tentativas`: ignorado (modo infinito). Parar apenas manualmente com Ctrl+C; valores enormes são aceitos (tratados como infinito).
+### Parametros
+- `data`: string base que sera concatenada com o nonce.
+- `dificuldade_hex`: numero de zeros a esquerda (em hexadecimal) exigidos no hash (0-64).
+- `max_tentativas`: ignorado (modo infinito). Parar manualmente com Ctrl+C.
 - `iteracoes`: quantidade de hashes para medir hashrate (benchmark), default 500000.
 - `--progress N`: exibe progresso a cada `N` tentativas (run) ou hashes (bench).
 - `--wallet caminho`: define o arquivo de carteira (default: `wallet.dat`).
-- `--reset-wallet`: recria a carteira (novo endereço, saldo zerado).
-
-Se nenhum parâmetro for informado, o comando `./coinminer run` usa:
-- `data` = `hello-from-coinminer`
-- `dificuldade_hex` = `4`
-- `max_tentativas` = `2000000`
-
-## Exemplo de saída
-```
-Data: "hello"
-Difficulty (hex zeros): 4
-Max attempts: 2000000
-
-FOUND!
-Nonce: 34677
-Hash: 0000a1c3...
-Time: 0.527s | Hashrate: 65.82 H/s
-
-Benchmark concluido: 500000 hashes
-Time: 0.418s | Hashrate: 1196080.37 H/s
-
-Reward: 50 coins adicionados. Novo saldo:
-Wallet address: e3f9... (exemplo)
-Balance: 50 coins
-Mined blocks: 1
-
-Mineracao encerrada apos 2000000 tentativas.
-Time: 1.234s | Hashrate medio: 1620000.00 H/s
-Blocos encontrados nesta sessao: 1
-Carteira apos a sessao:
-Wallet address: e3f9... (exemplo)
-Balance: 50 coins
-Mined blocks: 1
-```
+- `--reset-wallet`: recria a carteira (novo endereco, saldo zerado).
 
 ## Carteira
-- Arquivo simples (`wallet.dat` por padrão) contendo endereço, saldo e blocos minerados.
-- O comando `wallet` cria o arquivo se não existir (ou recria com `--reset-wallet`) e exibe o saldo.
-- O comando `run` carrega/cria a carteira antes de minerar e, ao encontrar um nonce válido, adiciona `50` coins ao saldo e incrementa o contador de blocos.
-- Use `--wallet <caminho>` para manter carteiras separadas ou evitar sobrescrever a padrão.
+- Arquivo simples (`wallet.dat` por padrao) contendo endereco, saldo e blocos minerados (modo local).
+- No modo Stratum/solo, o pagamento depende do endereco configurado no pool/node.
 
-## Stratum (progresso rumo a Bitcoin/pools)
+## Stratum (pool)
 - Comando `stratum <host> <port> <user> [password] [--retries N] [--delay SECS] [--coin NAME]`.
-- Mantém conexão viva, envia subscribe/authorize, loga pings e estatísticas a cada 30s.
-- Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`) a partir do array `params`.
-- Reconexão com retentativas e atraso configuráveis via `--retries` e `--delay`.
-- Registra `mining.set_difficulty` e o resultado de subscribe (`extranonce1`/`extranonce2_size`) para usar na futura construção de coinbase.
-- Conta trocas de job (`job_id` diferente) e flags `clean_jobs`, exibindo esses números no log periódico para facilitar depuração.
-- Quando há `extranonce1` e `merkle_branch`, calcula e exibe a merkle root usando uma `extranonce2` de zeros (tamanho informado pelo pool) para facilitar debug antes da submissão real.
+- Faz subscribe/authorize, processa notify/difficulty e tenta submeter shares.
+- Usa target por difficulty do pool (mining.set_difficulty) quando disponivel.
 
-## Interface (futuro, em C#)
-- A pasta `ui/` agora contém um projeto WPF (`Coinminer.Ui.csproj`) com um layout estático de dashboard (mock) para futura integração com o backend.
-- Abra `ui/Coinminer.Ui.sln` no Visual Studio para visualizar/rodar o protótipo; não há conexão com o minerador em C ainda.
+## Solo (node RPC)
+- Comando `solo <host> <port> <user> <password> [--coin NAME]`.
+- Usa `getblocktemplate` e `submitblock` via RPC.
+- Requer node local ativo (bitcoind/litecoind/dogecoind) com RPC habilitado.
+
+## Interface (WPF)
+- Projeto WPF em `ui/` com dashboard, modo Local/Stratum/Solo, carteira local e controle Start/Stop.
+- Abra `ui/Coinminer.Ui.sln` no Visual Studio para rodar.

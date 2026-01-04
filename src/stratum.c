@@ -62,10 +62,11 @@ static void process_line(const char *line, size_t len, size_t *notify_count) {
     }
 }
 
-static int recv_lines(int sock, size_t *notify_count) {
+static int recv_lines(int sock, size_t *notify_count, size_t *bytes_in) {
     char buf[4096];
     ssize_t n = recv(sock, buf, sizeof(buf), 0);
     if (n <= 0) return 0;
+    if (bytes_in) *bytes_in += (size_t)n;
 
     static char stash[8192];
     static size_t stash_len = 0;
@@ -94,7 +95,8 @@ static int recv_lines(int sock, size_t *notify_count) {
 
 static int send_ping(int sock) {
     const char *ping = "{\"id\":999,\"method\":\"mining.ping\",\"params\":[]}\n";
-    if (send(sock, ping, strlen(ping), 0) < 0) return 0;
+    ssize_t s = send(sock, ping, strlen(ping), 0);
+    if (s < 0) return 0;
     printf("[stratum] ping enviado\n");
     return 1;
 }
@@ -110,6 +112,8 @@ int stratum_run(const stratum_options *opts) {
 
     printf("[stratum] conectado a %s:%s\n", opts->host, opts->port);
 
+    size_t bytes_out = 0;
+    size_t bytes_in = 0;
     char subscribe[256];
     snprintf(subscribe, sizeof(subscribe), "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[]}");
     if (!send_line(sock, subscribe)) {
@@ -117,7 +121,8 @@ int stratum_run(const stratum_options *opts) {
         close(sock);
         return 1;
     }
-    recv_lines(sock, NULL);
+    bytes_out += strlen(subscribe) + 1;
+    recv_lines(sock, NULL, &bytes_in);
 
     char authorize[512];
     snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
@@ -127,10 +132,12 @@ int stratum_run(const stratum_options *opts) {
         close(sock);
         return 1;
     }
+    bytes_out += strlen(authorize) + 1;
     printf("[stratum] aguardando mensagens (Ctrl+C para sair)...\n");
 
     size_t notify_count = 0;
     time_t last_ping = time(NULL);
+    time_t last_stats = time(NULL);
 
     while (!stop_flag) {
         fd_set fds;
@@ -155,9 +162,16 @@ int stratum_run(const stratum_options *opts) {
             continue;
         }
 
-        if (!recv_lines(sock, &notify_count)) {
+        if (!recv_lines(sock, &notify_count, &bytes_in)) {
             fprintf(stderr, "[stratum] conexao encerrada\n");
             break;
+        }
+
+        time_t now = time(NULL);
+        if (now - last_stats >= 30) {
+            printf("[stratum] stats: notify=%zu | bytes_in=%zu | bytes_out=%zu\n",
+                   notify_count, bytes_in, bytes_out);
+            last_stats = now;
         }
     }
 

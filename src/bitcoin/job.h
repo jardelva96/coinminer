@@ -15,9 +15,11 @@ typedef struct {
     char ntime[16];
     int clean_jobs;
     uint64_t notify_count;
+    char last_notify[512];
 } bitcoin_job;
 
 void bitcoin_job_clear(bitcoin_job *job);
 void bitcoin_job_note_notify(bitcoin_job *job);
+void bitcoin_job_set_last_notify(bitcoin_job *job, const char *line, size_t len);
 
 #endif

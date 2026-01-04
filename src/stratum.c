@@ -59,6 +59,7 @@ static void process_line(const char *line, size_t len, bitcoin_job *job, size_t 
     printf("[stratum] recv line (%zu bytes): %.*s\n", len, (int)len, line);
     if (strstr(line, "mining.notify") != NULL) {
         if (job) bitcoin_job_note_notify(job);
+        if (job) bitcoin_job_set_last_notify(job, line, len);
         (*notify_count)++;
         printf("[stratum] notify recebido (%zu no total)\n", *notify_count);
     }

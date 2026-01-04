@@ -1,6 +1,7 @@
 #include "cli.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,20 @@ static int parse_u64_min(const char *arg, uint64_t min, uint64_t *out) {
     char *end = NULL;
     errno = 0;
     unsigned long long val = strtoull(arg, &end, 10);
+    if (errno != 0 || end == arg || *end != '\0') return 0;
+    if (val < min) return 0;
+    *out = (uint64_t)val;
+    return 1;
+}
+
+static int parse_u64_infinite_ok(const char *arg, uint64_t min, uint64_t *out) {
+    char *end = NULL;
+    errno = 0;
+    unsigned long long val = strtoull(arg, &end, 10);
+    if (errno == ERANGE || val == ULLONG_MAX) {
+        *out = MAX_ATTEMPTS_INFINITE;
+        return 1;
+    }
     if (errno != 0 || end == arg || *end != '\0') return 0;
     if (val < min) return 0;
     *out = (uint64_t)val;
@@ -70,7 +85,7 @@ static int parse_run(int argc, char **argv, cli_result *res) {
         }
     }
     if (argc >= 5 && argv[4][0] != '-') {
-        if (!parse_u64_min(argv[4], 0, &res->run.max_attempts)) {
+        if (!parse_u64_infinite_ok(argv[4], 0, &res->run.max_attempts)) {
             snprintf(res->error, sizeof(res->error), "Max tentativas invalido: %s (use inteiro >= 0)", argv[4]);
             return 0;
         }

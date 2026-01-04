@@ -40,7 +40,7 @@ cmake --build build
 ### Parâmetros
 - `data`: string base que será concatenada com o nonce.
 - `dificuldade_hex`: número de zeros à esquerda (em hexadecimal) exigidos no hash (0-64).
-- `max_tentativas`: ignorado (modo infinito). Parar apenas manualmente com Ctrl+C.
+- `max_tentativas`: ignorado (modo infinito). Parar apenas manualmente com Ctrl+C; valores enormes são aceitos (tratados como infinito).
 - `iteracoes`: quantidade de hashes para medir hashrate (benchmark), default 500000.
 - `--progress N`: exibe progresso a cada `N` tentativas (run) ou hashes (bench).
 - `--wallet caminho`: define o arquivo de carteira (default: `wallet.dat`).

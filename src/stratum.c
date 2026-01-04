@@ -56,7 +56,18 @@ static void handle_stop(int sig) {
     stop_flag = 1;
 }
 
-static void process_line(const char *line, size_t len, bitcoin_job *job, size_t *notify_count) {
+typedef struct {
+    double difficulty;
+    char extranonce1[64];
+    int extranonce2_size;
+    size_t set_difficulty_count;
+} stratum_session_state;
+
+static void skip_ws_local(const char **p) {
+    while (**p == ' ' || **p == '\t' || **p == '\n' || **p == '\r') (*p)++;
+}
+
+static void process_line(const char *line, size_t len, bitcoin_job *job, size_t *notify_count, stratum_session_state *state) {
     printf("[stratum] recv line (%zu bytes): %.*s\n", len, (int)len, line);
     if (strstr(line, "mining.notify") != NULL) {
         if (job) {
@@ -71,9 +82,59 @@ static void process_line(const char *line, size_t len, bitcoin_job *job, size_t 
         (*notify_count)++;
         printf("[stratum] notify recebido (%zu no total)\n", *notify_count);
     }
+
+    if (strstr(line, "mining.set_difficulty") != NULL) {
+        const char *p = strstr(line, "\"params\":[");
+        if (p) {
+            p = strchr(p, '[');
+            if (p) {
+                p++;
+                skip_ws_local(&p);
+                double diff = strtod(p, NULL);
+                if (diff > 0.0) {
+                    if (state) {
+                        state->difficulty = diff;
+                        state->set_difficulty_count++;
+                    }
+                    printf("[stratum] difficulty set to %.8f (count=%zu)\n", diff, state ? state->set_difficulty_count : 0);
+                }
+            }
+        }
+    }
+
+    if (strstr(line, "\"id\":1") && strstr(line, "\"result\":[") && strstr(line, "mining.subscribe")) {
+        const char *r = strstr(line, "\"result\":[");
+        if (r) {
+            const char *first_close = strchr(r, ']');
+            if (first_close) {
+                const char *p = first_close + 1;
+                skip_ws_local(&p);
+                if (*p == ',') p++;
+                skip_ws_local(&p);
+                if (*p == '\"') {
+                    p++;
+                    size_t len_ex = 0;
+                    while (p[len_ex] && p[len_ex] != '\"' && len_ex + 1 < sizeof(state->extranonce1)) {
+                        state->extranonce1[len_ex] = p[len_ex];
+                        len_ex++;
+                    }
+                    state->extranonce1[len_ex] = '\0';
+                    const char *after_ex = strchr(p, '\"');
+                    if (after_ex) {
+                        p = after_ex + 1;
+                        skip_ws_local(&p);
+                        if (*p == ',') p++;
+                        skip_ws_local(&p);
+                        state->extranonce2_size = atoi(p);
+                    }
+                    printf("[stratum] subscribe result: extranonce1=%s extranonce2_size=%d\n", state->extranonce1, state->extranonce2_size);
+                }
+            }
+        }
+    }
 }
 
-static int recv_lines(int sock, bitcoin_job *job, size_t *notify_count, size_t *bytes_in) {
+static int recv_lines(int sock, bitcoin_job *job, size_t *notify_count, size_t *bytes_in, stratum_session_state *state) {
     char buf[4096];
     ssize_t n = recv(sock, buf, sizeof(buf), 0);
     if (n <= 0) return 0;
@@ -93,7 +154,7 @@ static int recv_lines(int sock, bitcoin_job *job, size_t *notify_count, size_t *
         if (stash[i] == '\n') {
             size_t line_len = i - start;
             if (line_len > 0 && stash[start + line_len - 1] == '\r') line_len--;
-            process_line(stash + start, line_len, job, notify_count ? notify_count : &(size_t){0});
+            process_line(stash + start, line_len, job, notify_count ? notify_count : &(size_t){0}, state);
             start = i + 1;
         }
     }
@@ -138,6 +199,7 @@ int stratum_run(const stratum_options *opts) {
         size_t bytes_out = 0;
         size_t bytes_in = 0;
         size_t notify_count = 0;
+        stratum_session_state session = {0};
         printf("[stratum] alvo coin: %s\n", coin_type_to_name(opts->coin));
         char subscribe[256];
         snprintf(subscribe, sizeof(subscribe), "{\"id\":1,\"method\":\"mining.subscribe\",\"params\":[]}");
@@ -149,7 +211,7 @@ int stratum_run(const stratum_options *opts) {
         bytes_out += strlen(subscribe) + 1;
         bitcoin_job job;
         bitcoin_job_clear(&job);
-        recv_lines(sock, &job, NULL, &bytes_in);
+        recv_lines(sock, &job, NULL, &bytes_in, &session);
 
         char authorize[512];
         snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
@@ -189,7 +251,7 @@ int stratum_run(const stratum_options *opts) {
                 continue;
             }
 
-            if (!recv_lines(sock, &job, &notify_count, &bytes_in)) {
+            if (!recv_lines(sock, &job, &notify_count, &bytes_in, &session)) {
                 fprintf(stderr, "[stratum] conexao encerrada\n");
                 break;
             }
@@ -204,6 +266,10 @@ int stratum_run(const stratum_options *opts) {
                 if (job.parsed) {
                     printf("[stratum] job parsed: id=%s prev=%s merkle=%zu version=%s nbits=%s ntime=%s clean=%d\n",
                            job.job_id, job.prev_hash, job.merkle_count, job.version, job.nbits, job.ntime, job.clean_jobs);
+                }
+                if (session.difficulty > 0.0 || session.extranonce1[0] != '\0') {
+                    printf("[stratum] session: difficulty=%.8f (set %zux) extranonce1=%s extranonce2_size=%d\n",
+                           session.difficulty, session.set_difficulty_count, session.extranonce1, session.extranonce2_size);
                 }
                 last_stats = now;
             }

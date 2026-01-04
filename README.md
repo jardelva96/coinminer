@@ -93,3 +93,4 @@ Mined blocks: 1
 - Mantém conexão viva, envia subscribe/authorize, loga pings e estatísticas a cada 30s.
 - Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`) a partir do array `params`.
 - Reconexão com retentativas e atraso configuráveis via `--retries` e `--delay`.
+- Registra `mining.set_difficulty` e o resultado de subscribe (`extranonce1`/`extranonce2_size`) para usar na futura construção de coinbase.

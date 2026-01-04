@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <time.h>
 #include "bitcoin/job.h"
+#include "coins/registry.h"
 
 static int connect_tcp(const char *host, const char *port) {
     struct addrinfo hints;

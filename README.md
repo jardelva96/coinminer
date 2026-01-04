@@ -30,6 +30,9 @@ cmake --build build
 # Carteira (criar/mostrar saldo)
 ./build/coinminer wallet --wallet wallet.dat
 
+# Testar Stratum (subscribe/authorize basico)
+./build/coinminer stratum pool.exemplo.com 3333 worker userpass
+
 # Versão
 ./build/coinminer version
 

@@ -3,6 +3,7 @@
 #include "common.h"
 #include "miner.h"
 #include "wallet.h"
+#include "stratum.h"
 
 static void print_run_plan(const run_options *opts) {
     printf("Data: \"%s\"\n", opts->data);
@@ -48,6 +49,15 @@ int main(int argc, char **argv) {
             if (!ensure_wallet(&res.wallet, &info, res.wallet.reset)) return 1;
             print_wallet(&info);
             return 0;
+        }
+        case CMD_STRATUM: {
+            stratum_options s = {
+                .host = res.stratum.host,
+                .port = res.stratum.port,
+                .user = res.stratum.user,
+                .password = res.stratum.password
+            };
+            return stratum_run(&s);
         }
         case CMD_RUN:
             print_run_plan(&res.run);

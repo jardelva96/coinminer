@@ -8,6 +8,7 @@ add_executable(coinminer
   src/main.c
   src/cli.c
   src/miner.c
+  src/stratum.c
   src/wallet.c
   src/sha256.c
 )

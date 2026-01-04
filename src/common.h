@@ -2,6 +2,12 @@
 #define COMMON_H
 
 #include <stdint.h>
+typedef struct stratum_options {
+    const char *host;
+    const char *port;
+    const char *user;
+    const char *password;
+} stratum_options;
 
 #define COINMINER_VERSION "0.4.0"
 
@@ -18,6 +24,7 @@ typedef enum {
     CMD_RUN,
     CMD_BENCH,
     CMD_WALLET,
+    CMD_STRATUM,
     CMD_HELP,
     CMD_VERSION,
     CMD_UNKNOWN
@@ -46,6 +53,7 @@ typedef struct {
     run_options run;
     bench_options bench;
     wallet_options wallet;
+    stratum_options stratum;
     char error[160];
 } cli_result;
 

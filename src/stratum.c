@@ -10,8 +10,10 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdint.h>
 #include "bitcoin/job.h"
 #include "coins/registry.h"
+#include "bitcoin/block.h"
 
 static int connect_tcp(const char *host, const char *port) {
     struct addrinfo hints;
@@ -68,6 +70,16 @@ typedef struct {
 
 static void skip_ws_local(const char **p) {
     while (**p == ' ' || **p == '\t' || **p == '\n' || **p == '\r') (*p)++;
+}
+
+static void hex_from_bytes(const uint8_t *buf, size_t len, char *out, size_t out_len) {
+    static const char hex[] = "0123456789abcdef";
+    if (out_len < len * 2 + 1) return;
+    for (size_t i = 0; i < len; i++) {
+        out[i * 2] = hex[(buf[i] >> 4) & 0xF];
+        out[i * 2 + 1] = hex[buf[i] & 0xF];
+    }
+    out[len * 2] = '\0';
 }
 
 static void process_line(const char *line, size_t len, bitcoin_job *job, size_t *notify_count, stratum_session_state *state) {
@@ -287,6 +299,20 @@ int stratum_run(const stratum_options *opts) {
                 if (session.job_changes > 0 || session.clean_signals > 0) {
                     printf("[stratum] jobs: changes=%zu clean_signals=%zu last_job_id=%s\n",
                            session.job_changes, session.clean_signals, session.last_job_id);
+                }
+                if (job.parsed && session.extranonce1[0] != '\0') {
+                    uint8_t merkle[32];
+                    uint8_t en2[64] = {0};
+                    size_t en2_len = 0;
+                    if (session.extranonce2_size > 0) {
+                        en2_len = (size_t)session.extranonce2_size;
+                        if (en2_len > sizeof(en2)) en2_len = sizeof(en2);
+                    }
+                    if (bitcoin_build_merkle_root(&job, session.extranonce1, en2_len ? en2 : NULL, en2_len, merkle)) {
+                        char hexroot[65];
+                        hex_from_bytes(merkle, 32, hexroot, sizeof(hexroot));
+                        printf("[stratum] merkle (with extranonce2=%zu bytes of 0x00): %s\n", en2_len, hexroot);
+                    }
                 }
                 last_stats = now;
             }

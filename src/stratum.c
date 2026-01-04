@@ -59,8 +59,15 @@ static void handle_stop(int sig) {
 static void process_line(const char *line, size_t len, bitcoin_job *job, size_t *notify_count) {
     printf("[stratum] recv line (%zu bytes): %.*s\n", len, (int)len, line);
     if (strstr(line, "mining.notify") != NULL) {
-        if (job) bitcoin_job_note_notify(job);
-        if (job) bitcoin_job_set_last_notify(job, line, len);
+        if (job) {
+            if (bitcoin_job_parse_notify(job, line, len)) {
+                printf("[stratum] notify parseado: job_id=%s prevhash=%s merkle_count=%zu clean=%d\n",
+                       job->job_id, job->prev_hash, job->merkle_count, job->clean_jobs);
+            } else {
+                bitcoin_job_note_notify(job);
+                bitcoin_job_set_last_notify(job, line, len);
+            }
+        }
         (*notify_count)++;
         printf("[stratum] notify recebido (%zu no total)\n", *notify_count);
     }
@@ -193,6 +200,10 @@ int stratum_run(const stratum_options *opts) {
                        coin_type_to_name(opts->coin), notify_count, bytes_in, bytes_out);
                 if (job.last_notify[0] != '\0') {
                     printf("[stratum] last notify: %s\n", job.last_notify);
+                }
+                if (job.parsed) {
+                    printf("[stratum] job parsed: id=%s prev=%s merkle=%zu version=%s nbits=%s ntime=%s clean=%d\n",
+                           job.job_id, job.prev_hash, job.merkle_count, job.version, job.nbits, job.ntime, job.clean_jobs);
                 }
                 last_stats = now;
             }

@@ -30,7 +30,7 @@ cmake --build build
 # Carteira (criar/mostrar saldo)
 ./build/coinminer wallet --wallet wallet.dat
 
-# Testar Stratum (subscribe/authorize basico)
+# Testar Stratum (subscribe/authorize + notify parsing)
 ./build/coinminer stratum pool.exemplo.com 3333 worker userpass --coin bitcoin
 
 # Versão
@@ -87,3 +87,9 @@ Mined blocks: 1
 - O comando `wallet` cria o arquivo se não existir (ou recria com `--reset-wallet`) e exibe o saldo.
 - O comando `run` carrega/cria a carteira antes de minerar e, ao encontrar um nonce válido, adiciona `50` coins ao saldo e incrementa o contador de blocos.
 - Use `--wallet <caminho>` para manter carteiras separadas ou evitar sobrescrever a padrão.
+
+## Stratum (progresso rumo a Bitcoin/pools)
+- Comando `stratum <host> <port> <user> [password] [--retries N] [--delay SECS] [--coin NAME]`.
+- Mantém conexão viva, envia subscribe/authorize, loga pings e estatísticas a cada 30s.
+- Captura e conta mensagens `mining.notify`, armazenando o último payload e extraindo campos principais (`job_id`, `prevhash`, `coinb1/coinb2`, `merkle_branch`, `version`, `nbits`, `ntime`, `clean_jobs`).
+- Reconexão com retentativas e atraso configuráveis via `--retries` e `--delay`.

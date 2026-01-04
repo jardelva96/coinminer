@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <time.h>
+#include "bitcoin/job.h"
 
 static int connect_tcp(const char *host, const char *port) {
     struct addrinfo hints;
@@ -54,15 +55,16 @@ static void handle_stop(int sig) {
     stop_flag = 1;
 }
 
-static void process_line(const char *line, size_t len, size_t *notify_count) {
+static void process_line(const char *line, size_t len, bitcoin_job *job, size_t *notify_count) {
     printf("[stratum] recv line (%zu bytes): %.*s\n", len, (int)len, line);
     if (strstr(line, "mining.notify") != NULL) {
+        if (job) bitcoin_job_note_notify(job);
         (*notify_count)++;
         printf("[stratum] notify recebido (%zu no total)\n", *notify_count);
     }
 }
 
-static int recv_lines(int sock, size_t *notify_count, size_t *bytes_in) {
+static int recv_lines(int sock, bitcoin_job *job, size_t *notify_count, size_t *bytes_in) {
     char buf[4096];
     ssize_t n = recv(sock, buf, sizeof(buf), 0);
     if (n <= 0) return 0;
@@ -82,7 +84,7 @@ static int recv_lines(int sock, size_t *notify_count, size_t *bytes_in) {
         if (stash[i] == '\n') {
             size_t line_len = i - start;
             if (line_len > 0 && stash[start + line_len - 1] == '\r') line_len--;
-            process_line(stash + start, line_len, notify_count ? notify_count : &(size_t){0});
+            process_line(stash + start, line_len, job, notify_count ? notify_count : &(size_t){0});
             start = i + 1;
         }
     }
@@ -135,7 +137,9 @@ int stratum_run(const stratum_options *opts) {
             goto wait_reconnect;
         }
         bytes_out += strlen(subscribe) + 1;
-        recv_lines(sock, NULL, &bytes_in);
+        bitcoin_job job;
+        bitcoin_job_clear(&job);
+        recv_lines(sock, &job, NULL, &bytes_in);
 
         char authorize[512];
         snprintf(authorize, sizeof(authorize), "{\"id\":2,\"method\":\"mining.authorize\",\"params\":[\"%s\",\"%s\"]}",
@@ -175,7 +179,7 @@ int stratum_run(const stratum_options *opts) {
                 continue;
             }
 
-            if (!recv_lines(sock, &notify_count, &bytes_in)) {
+            if (!recv_lines(sock, &job, &notify_count, &bytes_in)) {
                 fprintf(stderr, "[stratum] conexao encerrada\n");
                 break;
             }

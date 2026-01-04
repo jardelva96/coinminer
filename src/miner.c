@@ -1,9 +1,17 @@
 #include "miner.h"
 
 #include <stdio.h>
+<<<<<<< HEAD
 #include <string.h>
 #include <time.h>
 #include "sha256.h"
+=======
+#include <signal.h>
+#include <string.h>
+#include <time.h>
+#include "sha256.h"
+#include "wallet.h"
+>>>>>>> codex/create-readme-for-project-vn5azj
 
 static void hex_print(const uint8_t *buf, size_t n) {
     for (size_t i = 0; i < n; i++) printf("%02x", buf[i]);
@@ -35,6 +43,7 @@ static void maybe_report_progress(uint64_t current, double start, uint64_t inter
            label, (unsigned long long)(current + 1), rate, elapsed);
 }
 
+<<<<<<< HEAD
 int run_miner(const run_options *opts) {
     uint8_t hash[SHA256_DIGEST_SIZE];
     char input[1024];
@@ -42,6 +51,38 @@ int run_miner(const run_options *opts) {
     double start = now_seconds();
 
     for (uint64_t i = 0; i < opts->max_attempts; i++) {
+=======
+static volatile sig_atomic_t stop_flag = 0;
+
+static void handle_stop(int sig) {
+    (void)sig;
+    stop_flag = 1;
+}
+
+int run_miner(const run_options *opts) {
+    uint8_t hash[SHA256_DIGEST_SIZE];
+    char input[1024];
+    wallet_info wallet;
+    uint64_t found_blocks = 0;
+    uint64_t attempts_done = 0;
+
+    signal(SIGINT, handle_stop);
+#ifdef SIGTERM
+    signal(SIGTERM, handle_stop);
+#endif
+
+    if (!ensure_wallet(&opts->wallet, &wallet, opts->wallet.reset)) {
+        return 1;
+    }
+
+    double start = now_seconds();
+
+    for (uint64_t i = 0; ; i++) {
+        if (stop_flag) {
+            attempts_done = i;
+            break;
+        }
+>>>>>>> codex/create-readme-for-project-vn5azj
         int n = snprintf(input, sizeof(input), "%s|%llu", opts->data, (unsigned long long)i);
         if (n < 0 || (size_t)n >= sizeof(input)) {
             fprintf(stderr, "input buffer overflow\n");
@@ -59,6 +100,7 @@ int run_miner(const run_options *opts) {
             printf("FOUND!\nNonce: %llu\nHash: ", (unsigned long long)i);
             hex_print(hash, SHA256_DIGEST_SIZE);
             printf("\nTime: %.3fs | Hashrate: %.2f H/s\n", elapsed, hash_rate);
+<<<<<<< HEAD
             return 0;
         }
 
@@ -69,6 +111,31 @@ int run_miner(const run_options *opts) {
     double hash_rate = (elapsed > 0.0) ? (double)opts->max_attempts / elapsed : 0.0;
     printf("\nNot found within max attempts.\n");
     printf("Time: %.3fs | Hashrate: %.2f H/s\n", elapsed, hash_rate);
+=======
+
+            wallet.balance += MINING_REWARD;
+            wallet.mined_blocks += 1;
+            found_blocks += 1;
+            if (!save_wallet(&opts->wallet, &wallet)) {
+                fprintf(stderr, "Nao foi possivel atualizar carteira.\n");
+                return 1;
+            }
+            printf("Reward: %llu coins adicionados. Novo saldo:\n", (unsigned long long)MINING_REWARD);
+            print_wallet(&wallet);
+        }
+
+        maybe_report_progress(i, start, opts->progress_interval, "run");
+        attempts_done = i + 1;
+    }
+
+    double elapsed = now_seconds() - start;
+    double hash_rate = (elapsed > 0.0) ? (double)attempts_done / elapsed : 0.0;
+    printf("\nMineracao interrompida manualmente (modo infinito).\n");
+    printf("Time: %.3fs | Hashrate medio: %.2f H/s\n", elapsed, hash_rate);
+    printf("Blocos encontrados nesta sessao: %llu\n", (unsigned long long)found_blocks);
+    printf("Carteira apos a sessao:\n");
+    print_wallet(&wallet);
+>>>>>>> codex/create-readme-for-project-vn5azj
     return 0;
 }
 

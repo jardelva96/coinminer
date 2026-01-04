@@ -8,11 +8,20 @@ add_executable(coinminer
   src/main.c
   src/cli.c
   src/miner.c
+<<<<<<< HEAD
+=======
+  src/solo.c
+  src/stratum.c
+  src/coins/registry.c
+  src/bitcoin/block.c
+  src/bitcoin/job.c
+  src/wallet.c
+>>>>>>> codex/create-readme-for-project-vn5azj
   src/sha256.c
 )
 
 if (MSVC)
-  target_compile_options(coinminer PRIVATE /W4 /O2)
+  target_compile_options(coinminer PRIVATE /W4 /O2 /RTC1-)
 else()
   target_compile_options(coinminer PRIVATE -O2 -Wall -Wextra -Wpedantic)
 endif()

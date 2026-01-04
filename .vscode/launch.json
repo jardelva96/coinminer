@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug coinminer (cppvsdbg)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "\\\\build\\\\coinminer.exe",
+      "args": ["hello", "4", "2000000"],
+      "cwd": "",
+      "preLaunchTask": "CMake: build",
+      "console": "externalTerminal"
+    }
+  ]
+}

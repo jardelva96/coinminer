@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: configure (Ninja)",
+      "type": "shell",
+      "command": "cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug",
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: build",
+      "type": "shell",
+      "command": "cmake --build build",
+      "dependsOn": ["CMake: configure (Ninja)"],
+      "problemMatcher": [""]
+    },
+    {
+      "label": "Run",
+      "type": "shell",
+      "command": ".\\\\build\\\\coinminer.exe \\"hello\\" 4 2000000",
+      "dependsOn": ["CMake: build"],
+      "problemMatcher": []
+    }
+  ]
+}

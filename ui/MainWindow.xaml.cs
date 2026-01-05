@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private double _stratumDifficulty;
     private string _lastWalletAddress = string.Empty;
     private bool _isSimulationMode = true;
+    private bool _isReadyToStart = true;
 
     public MainWindow()
     {
@@ -140,14 +141,17 @@ public partial class MainWindow : Window
                 ModeSelector.SelectedIndex = 0;
             }
             StatusDetailValue.Text = "Modo simulado ativo (run/bench local).";
+            _isReadyToStart = true;
         }
         else
         {
             ModeSelector.SelectedIndex = 2; // Solo
             StatusDetailValue.Text = "Modo real: configure host/porta/credenciais do node.";
+            _isReadyToStart = false;
         }
 
         UpdateCommandPreview();
+        UpdateStartButtons();
     }
 
     private void PrefillMinerPath()
@@ -406,6 +410,7 @@ public partial class MainWindow : Window
             MinerPathValue.Text = "Miner: not found";
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
             return;
         }
 
@@ -441,6 +446,7 @@ public partial class MainWindow : Window
                 StratumStatusValue.Text = "Not connected";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -454,6 +460,7 @@ public partial class MainWindow : Window
                 SetStatus("Missing pool", "Fill pool host and port");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -520,6 +527,7 @@ public partial class MainWindow : Window
                 SetStatus("Missing node", "Fill host and port");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -646,16 +654,20 @@ public partial class MainWindow : Window
         var hostEmpty = string.IsNullOrWhiteSpace(PoolHostBox?.Text);
         var portEmpty = string.IsNullOrWhiteSpace(PoolPortBox?.Text);
         var binaryEmpty = string.IsNullOrWhiteSpace(MinerPathBox?.Text);
+        var binaryExists = !binaryEmpty && File.Exists(MinerPathBox!.Text.Trim());
 
         if (!_isSimulationMode)
         {
             if (hostEmpty) missing.Add("host");
             if (portEmpty) missing.Add("porta");
             if (binaryEmpty) missing.Add("binário");
+            else if (!binaryExists) missing.Add("binário inválido");
 
-            ConnectionHintValue.Text = missing.Count == 0
+            _isReadyToStart = missing.Count == 0;
+            ConnectionHintValue.Text = _isReadyToStart
                 ? "Real: pronto para conectar via solo RPC."
                 : $"Real: defina {string.Join(", ", missing)} antes de iniciar.";
+            UpdateStartButtons();
             return;
         }
 
@@ -665,9 +677,29 @@ public partial class MainWindow : Window
             if (portEmpty) missing.Add("porta");
         }
 
-        ConnectionHintValue.Text = missing.Count == 0
+        _isReadyToStart = missing.Count == 0;
+        ConnectionHintValue.Text = _isReadyToStart
             ? "Simulação: run/bench local ou conexão opcional a pool/node."
             : $"Simulação: preencha {string.Join(", ", missing)} para conectar.";
+        UpdateStartButtons();
+    }
+
+    private void UpdateStartButtons()
+    {
+        if (StartStopButton == null || ApplySettingsButton == null)
+        {
+            return;
+        }
+
+        if (_minerProcess != null && !_minerProcess.HasExited)
+        {
+            StartStopButton.IsEnabled = true;
+            ApplySettingsButton.IsEnabled = true;
+            return;
+        }
+
+        StartStopButton.IsEnabled = _isReadyToStart;
+        ApplySettingsButton.IsEnabled = _isReadyToStart;
     }
 
     private async Task StopMiningAsync()
@@ -734,6 +766,7 @@ public partial class MainWindow : Window
         AddActivity("Mining stopped.");
         StartStopButton.IsEnabled = true;
         ApplySettingsButton.IsEnabled = true;
+        UpdateStartButtons();
         _isStopping = false;
     }
 
@@ -758,6 +791,7 @@ public partial class MainWindow : Window
                 StartStopButton.Content = "Start mining";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
             });
         };
 
@@ -784,6 +818,7 @@ public partial class MainWindow : Window
             }
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
         }
         catch (Exception ex)
         {
@@ -791,6 +826,7 @@ public partial class MainWindow : Window
             AddActivity($"Failed to start process: {ex.Message}");
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
         }
     }
 

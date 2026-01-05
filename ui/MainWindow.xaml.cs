@@ -577,6 +577,7 @@ public partial class MainWindow : Window
         }
 
         CommandPreviewValue.Text = BuildCommandPreview();
+        UpdateConnectionHint();
     }
 
     private string BuildCommandPreview()
@@ -631,6 +632,42 @@ public partial class MainWindow : Window
         }
 
         return candidate.Contains(' ') ? $"\"{candidate}\"" : candidate;
+    }
+
+    private void UpdateConnectionHint()
+    {
+        if (ConnectionHintValue == null)
+        {
+            return;
+        }
+
+        var mode = _isSimulationMode ? GetSelectedMode() : "solo";
+        var missing = new Collection<string>();
+        var hostEmpty = string.IsNullOrWhiteSpace(PoolHostBox?.Text);
+        var portEmpty = string.IsNullOrWhiteSpace(PoolPortBox?.Text);
+        var binaryEmpty = string.IsNullOrWhiteSpace(MinerPathBox?.Text);
+
+        if (!_isSimulationMode)
+        {
+            if (hostEmpty) missing.Add("host");
+            if (portEmpty) missing.Add("porta");
+            if (binaryEmpty) missing.Add("binário");
+
+            ConnectionHintValue.Text = missing.Count == 0
+                ? "Real: pronto para conectar via solo RPC."
+                : $"Real: defina {string.Join(", ", missing)} antes de iniciar.";
+            return;
+        }
+
+        if (mode == "stratum" || mode == "solo")
+        {
+            if (hostEmpty) missing.Add("host");
+            if (portEmpty) missing.Add("porta");
+        }
+
+        ConnectionHintValue.Text = missing.Count == 0
+            ? "Simulação: run/bench local ou conexão opcional a pool/node."
+            : $"Simulação: preencha {string.Join(", ", missing)} para conectar.";
     }
 
     private async Task StopMiningAsync()

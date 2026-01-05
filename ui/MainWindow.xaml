@@ -87,6 +87,30 @@
                 <Grid>
                     <!-- Miner -->
                     <StackPanel x:Name="MinerView" Visibility="Visible">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Execution mode" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="ExecutionModeSummary" Text="Simulated hashing with local wallet updates." Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,12"/>
+                                <WrapPanel>
+                                    <ToggleButton x:Name="SimulationModeButton"
+                                                  Content="Simulação (mock/local)"
+                                                  IsChecked="True"
+                                                  Click="OnSimulationModeClick"
+                                                  Style="{StaticResource PrimaryButton}"
+                                                  Width="200"
+                                                  Height="48"
+                                                  Margin="0,0,10,0"/>
+                                    <ToggleButton x:Name="RealModeButton"
+                                                  Content="Real (solo / node)"
+                                                  Click="OnRealModeClick"
+                                                  Style="{StaticResource SecondaryButton}"
+                                                  Width="200"
+                                                  Height="48"/>
+                                    <TextBlock Text="Escolha se a UI roda em modo de simulação ou conecta a um node real via solo." VerticalAlignment="Center" Margin="12,0,0,0" Foreground="{DynamicResource MutedBrush}"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
                         <UniformGrid Columns="3" Margin="0,0,0,16">
                             <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                                 <StackPanel>
@@ -130,59 +154,84 @@
                                     <Button x:Name="ApplySettingsButton" Content="Apply settings" Click="OnApplySettingsClick"
                                             Style="{StaticResource SecondaryButton}" Margin="0,8,0,0"/>
                                     <TextBlock x:Name="StatusDetailValue" Text="Waiting for start" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,6,0,0"/>
-                                    <TextBlock x:Name="MinerPathValue" Text="Miner: -" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,6,0,0"/>
+                                    <TextBlock Text="Miner binary" Foreground="{DynamicResource MutedBrush}" Margin="0,12,0,4"/>
+                                    <TextBox x:Name="MinerPathBox" Text="" Margin="0,0,0,6" TextChanged="OnMinerPathChanged"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Button Content="Locate binary" Style="{StaticResource SecondaryButton}" Click="OnBrowseMinerPathClick" Margin="0,0,8,0"/>
+                                        <Button Content="Use repo build" Style="{StaticResource SecondaryButton}" Click="OnUseDetectedMinerPathClick"/>
+                                    </StackPanel>
+                                    <TextBlock x:Name="MinerPathValue" Text="Miner: -" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,2,0,0"/>
                                     <TextBlock x:Name="LastOutputValue" Text="Last output: -" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,6,0,0"/>
+                                    <TextBlock x:Name="RealModeHint" Text="Real mode usa solo RPC e requer node + credenciais." Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,8,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
                                 </StackPanel>
 
                                 <StackPanel Grid.Column="1">
                                     <TextBlock Text="Mining profile" Foreground="{DynamicResource MutedBrush}"/>
                                     <TextBlock x:Name="ProfileValue" Text="CPU: 0 H/s (SHA-256)" FontWeight="SemiBold" Margin="0,6,0,0"/>
                                     <TextBlock x:Name="ProfileDetailValue" Text="GPU: n/a" FontWeight="SemiBold" Margin="0,6,0,0"/>
-                                    <WrapPanel Margin="0,10,0,0">
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Mode" Foreground="{DynamicResource MutedBrush}"/>
-                                            <ComboBox x:Name="ModeSelector" Width="150" SelectedIndex="0">
-                                                <ComboBoxItem Content="Local (SHA-256)" Tag="local"/>
-                                                <ComboBoxItem Content="Stratum (pool)" Tag="stratum"/>
-                                                <ComboBoxItem Content="Solo (node)" Tag="solo"/>
-                                            </ComboBox>
+                                    <Border x:Name="ConnectionCard" Background="{DynamicResource ActivityBgBrush}" CornerRadius="10" Padding="10" Margin="0,10,0,0">
+                                        <StackPanel>
+                                            <TextBlock x:Name="ConnectionCardTitle" Text="Pool / node connection" FontWeight="SemiBold"/>
+                                            <TextBlock x:Name="ConnectionCardDescription" Text="Escolha pool (stratum), node solo ou modo local." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                            <WrapPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Mode" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <ComboBox x:Name="ModeSelector" Width="180" SelectedIndex="0" SelectionChanged="OnModeChanged">
+                                                        <ComboBoxItem Content="Local (SHA-256)" Tag="local"/>
+                                                        <ComboBoxItem Content="Stratum (pool)" Tag="stratum"/>
+                                                        <ComboBoxItem Content="Solo (node)" Tag="solo"/>
+                                                    </ComboBox>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Host" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="PoolHostBox" Width="160" Text="localhost" TextChanged="OnConnectionFieldChanged"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Port" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="PoolPortBox" Width="80" Text="8332" TextChanged="OnConnectionFieldChanged"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="User" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="PoolUserBox" Width="140" Text="worker" TextChanged="OnConnectionFieldChanged"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Pass" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="PoolPassBox" Width="100" Text="x" TextChanged="OnConnectionFieldChanged"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Coin" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <ComboBox x:Name="CoinSelector" Width="140" SelectedIndex="0" SelectionChanged="OnCoinChanged">
+                                                        <ComboBoxItem Content="Bitcoin" Tag="bitcoin"/>
+                                                        <ComboBoxItem Content="Litecoin" Tag="litecoin"/>
+                                                        <ComboBoxItem Content="Dogecoin" Tag="dogecoin"/>
+                                                        <ComboBoxItem Content="Monero" Tag="monero"/>
+                                                        <ComboBoxItem Content="Ravencoin" Tag="ravencoin"/>
+                                                        <ComboBoxItem Content="Zcash" Tag="zcash"/>
+                                                    </ComboBox>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Difficulty" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="DifficultyBox" Width="70" Text="4" TextChanged="OnMiningTuningChanged"/>
+                                                </StackPanel>
+                                                <StackPanel Margin="0,0,12,10">
+                                                    <TextBlock Text="Progress" Foreground="{DynamicResource MutedBrush}"/>
+                                                    <TextBox x:Name="ProgressBox" Width="90" Text="10000" TextChanged="OnMiningTuningChanged"/>
+                                                </StackPanel>
+                                            </WrapPanel>
+                                            <TextBlock x:Name="ModeLockNote" Text="Modo real força solo (RPC). Preencha host/porta/usuário/senha do seu node local." Foreground="{DynamicResource MutedBrush}" Visibility="Collapsed" TextWrapping="Wrap"/>
+                                            <Border x:Name="RealConfigCallout" Background="{DynamicResource SidebarHoverBrush}" CornerRadius="8" Padding="10" Margin="0,6,0,0" Visibility="Collapsed">
+                                                <StackPanel>
+                                                    <TextBlock Text="Configurações para mineração real" FontWeight="SemiBold"/>
+                                                    <TextBlock Text="Selecione o binário real, informe host/porta do node (solo) e credenciais RPC. O comando abaixo exibirá o que será executado." Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                            <TextBlock x:Name="ConnectionHintValue" Text="" Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                                            <StackPanel Margin="0,10,0,0">
+                                                <TextBlock Text="Comando previsto" FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="CommandPreviewValue" Text="coinminer run --progress 10000" Foreground="{DynamicResource MutedBrush}" FontFamily="Consolas" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            </StackPanel>
                                         </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Host" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="PoolHostBox" Width="160" Text="localhost"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Port" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="PoolPortBox" Width="80" Text="8332"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="User" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="PoolUserBox" Width="140" Text="worker"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Pass" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="PoolPassBox" Width="100" Text="x"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Coin" Foreground="{DynamicResource MutedBrush}"/>
-                                            <ComboBox x:Name="CoinSelector" Width="140" SelectedIndex="0">
-                                                <ComboBoxItem Content="Bitcoin" Tag="bitcoin"/>
-                                                <ComboBoxItem Content="Litecoin" Tag="litecoin"/>
-                                                <ComboBoxItem Content="Dogecoin" Tag="dogecoin"/>
-                                                <ComboBoxItem Content="Monero" Tag="monero"/>
-                                                <ComboBoxItem Content="Ravencoin" Tag="ravencoin"/>
-                                                <ComboBoxItem Content="Zcash" Tag="zcash"/>
-                                            </ComboBox>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Difficulty" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="DifficultyBox" Width="70" Text="4"/>
-                                        </StackPanel>
-                                        <StackPanel Margin="0,0,12,10">
-                                            <TextBlock Text="Progress" Foreground="{DynamicResource MutedBrush}"/>
-                                            <TextBox x:Name="ProgressBox" Width="90" Text="10000"/>
-                                        </StackPanel>
-                                    </WrapPanel>
+                                    </Border>
                                     <WrapPanel Margin="0,10,0,0">
                                         <Button Content="Auto" Style="{StaticResource ChipButton}"/>
                                         <Button Content="Ethereum" Style="{StaticResource ChipButton}"/>

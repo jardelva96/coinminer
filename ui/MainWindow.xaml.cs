@@ -11,6 +11,7 @@ using System.Windows.Threading;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Win32;
 
 namespace Coinminer.Ui;
 
@@ -35,12 +36,17 @@ public partial class MainWindow : Window
     private ulong _stratumBytesOut;
     private double _stratumDifficulty;
     private string _lastWalletAddress = string.Empty;
+    private bool _isSimulationMode = true;
+    private bool _isReadyToStart = true;
 
     public MainWindow()
     {
         InitializeComponent();
         SetActiveView("Miner");
         DataContext = this;
+        UpdateExecutionModeUI();
+        PrefillMinerPath();
+        UpdateCommandPreview();
 
         _uptimeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _uptimeTimer.Tick += (_, _) => UpdateUptime();
@@ -97,6 +103,90 @@ public partial class MainWindow : Window
         ApplyTheme(ThemeToggle.IsChecked == true);
     }
 
+    private void UpdateExecutionModeUI()
+    {
+        if (SimulationModeButton == null || RealModeButton == null)
+        {
+            return;
+        }
+
+        SimulationModeButton.IsChecked = _isSimulationMode;
+        RealModeButton.IsChecked = !_isSimulationMode;
+
+        if (ConnectionCardTitle != null)
+        {
+            ConnectionCardTitle.Text = _isSimulationMode ? "Conexão (pool / simulação)" : "Mineração real (solo RPC)";
+        }
+
+        if (ConnectionCardDescription != null)
+        {
+            ConnectionCardDescription.Text = _isSimulationMode
+                ? "Use run/bench ou Stratum/Solo em modo de demonstração."
+                : "A UI força modo solo e exige host/porta/usuário/senha do node RPC local.";
+        }
+
+        ExecutionModeSummary.Text = _isSimulationMode
+            ? "Simulated hashing with local wallet updates."
+            : "Real mining via solo RPC (node) using the chosen binary.";
+
+        ModeSelector.IsEnabled = _isSimulationMode;
+        RealConfigCallout.Visibility = _isSimulationMode ? Visibility.Collapsed : Visibility.Visible;
+        RealModeHint.Visibility = _isSimulationMode ? Visibility.Collapsed : Visibility.Visible;
+        ModeLockNote.Visibility = _isSimulationMode ? Visibility.Collapsed : Visibility.Visible;
+
+        if (_isSimulationMode)
+        {
+            if (ModeSelector.SelectedIndex < 0)
+            {
+                ModeSelector.SelectedIndex = 0;
+            }
+            StatusDetailValue.Text = "Modo simulado ativo (run/bench local).";
+            _isReadyToStart = true;
+        }
+        else
+        {
+            ModeSelector.SelectedIndex = 2; // Solo
+            StatusDetailValue.Text = "Modo real: configure host/porta/credenciais do node.";
+            _isReadyToStart = false;
+        }
+
+        UpdateCommandPreview();
+        UpdateStartButtons();
+    }
+
+    private void PrefillMinerPath()
+    {
+        var repoRoot = FindRepoRoot();
+        var detected = FindMinerPath(repoRoot);
+        if (!string.IsNullOrWhiteSpace(detected))
+        {
+            MinerPathBox.Text = detected;
+            MinerPathValue.Text = $"Miner: {detected}";
+        }
+        else
+        {
+            MinerPathValue.Text = "Miner: not found";
+        }
+
+        UpdateCommandPreview();
+    }
+
+    private string? GetMinerPath(string repoRoot)
+    {
+        var fromInput = MinerPathBox.Text?.Trim();
+        if (!string.IsNullOrWhiteSpace(fromInput))
+        {
+            if (File.Exists(fromInput))
+            {
+                return fromInput;
+            }
+            StatusDetailValue.Text = "Binário informado não existe. Ajuste o caminho.";
+            return null;
+        }
+
+        return FindMinerPath(repoRoot);
+    }
+
     private async void OnStartStopClick(object sender, RoutedEventArgs e)
     {
         if (_minerProcess == null || _minerProcess.HasExited)
@@ -116,6 +206,80 @@ public partial class MainWindow : Window
             await StopMiningAsync();
         }
         StartMining();
+    }
+
+    private void OnSimulationModeClick(object sender, RoutedEventArgs e)
+    {
+        _isSimulationMode = true;
+        UpdateExecutionModeUI();
+    }
+
+    private void OnRealModeClick(object sender, RoutedEventArgs e)
+    {
+        _isSimulationMode = false;
+        UpdateExecutionModeUI();
+    }
+
+    private void OnModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateCommandPreview();
+    }
+
+    private void OnCoinChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _coinLabel = GetSelectedCoinLabel();
+        UpdateCommandPreview();
+    }
+
+    private void OnConnectionFieldChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateCommandPreview();
+    }
+
+    private void OnMiningTuningChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateCommandPreview();
+    }
+
+    private void OnBrowseMinerPathClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "coinminer|coinminer.exe;coinminer|Executables|*.exe;*.bin;*.app|All files|*.*",
+            Title = "Selecione o binário do minerador"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            MinerPathBox.Text = dialog.FileName;
+            MinerPathValue.Text = $"Miner: {dialog.FileName}";
+        }
+
+        UpdateCommandPreview();
+    }
+
+    private void OnUseDetectedMinerPathClick(object sender, RoutedEventArgs e)
+    {
+        var repoRoot = FindRepoRoot();
+        var detected = FindMinerPath(repoRoot);
+        if (detected != null)
+        {
+            MinerPathBox.Text = detected;
+            MinerPathValue.Text = $"Miner: {detected}";
+            StatusDetailValue.Text = "Binário encontrado na pasta build.";
+        }
+        else
+        {
+            MinerPathValue.Text = "Miner: not found";
+            StatusDetailValue.Text = "Construa o binário ou selecione manualmente.";
+        }
+
+        UpdateCommandPreview();
+    }
+
+    private void OnMinerPathChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateCommandPreview();
     }
 
     private void OnCreateWalletClick(object sender, RoutedEventArgs e)
@@ -238,14 +402,15 @@ public partial class MainWindow : Window
         ApplySettingsButton.IsEnabled = false;
 
         var repoRoot = FindRepoRoot();
-        var minerPath = FindMinerPath(repoRoot);
+        var minerPath = GetMinerPath(repoRoot);
         if (minerPath == null)
         {
-            SetStatus("Miner not found", "Build the C miner first");
-            AddActivity("Miner executable not found. Build the C project first.");
+            SetStatus("Miner not found", "Selecione o binário ou construa o projeto (build).");
+            AddActivity("Miner executable not found. Select the binary or build the C project first.");
             MinerPathValue.Text = "Miner: not found";
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
             return;
         }
 
@@ -270,8 +435,9 @@ public partial class MainWindow : Window
         BalanceFiat.Text = $"{_coinLabel} balance";
         StatusValue.Text = "Starting";
 
-        _isStratumMode = GetSelectedMode() == "stratum";
-        var isSoloMode = GetSelectedMode() == "solo";
+        var selectedMode = _isSimulationMode ? GetSelectedMode() : "solo";
+        _isStratumMode = selectedMode == "stratum";
+        var isSoloMode = selectedMode == "solo";
         if (_isStratumMode)
         {
             if (!IsStratumCoinSupported(coinData))
@@ -280,6 +446,7 @@ public partial class MainWindow : Window
                 StratumStatusValue.Text = "Not connected";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -293,6 +460,7 @@ public partial class MainWindow : Window
                 SetStatus("Missing pool", "Fill pool host and port");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -359,6 +527,7 @@ public partial class MainWindow : Window
                 SetStatus("Missing node", "Fill host and port");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
                 return;
             }
 
@@ -371,8 +540,8 @@ public partial class MainWindow : Window
                 pass = "rpcpass";
             }
 
-            StatusDetailValue.Text = $"Connecting node: {host}:{port}";
-            ProfileValue.Text = "Solo node session";
+            StatusDetailValue.Text = $"Connecting node: {host}:{port}" + (_isSimulationMode ? string.Empty : " (real)");
+            ProfileValue.Text = _isSimulationMode ? "Solo node session" : "Real solo node session";
             StratumStatusValue.Text = "Node connecting";
             SoloStatusValue.Text = "Solo: connecting";
 
@@ -406,6 +575,131 @@ public partial class MainWindow : Window
             CreateNoWindow = true
         };
         StartProcess(localStartInfo, $"Mining {_coinLabel} (demo)");
+    }
+
+    private void UpdateCommandPreview()
+    {
+        if (CommandPreviewValue == null)
+        {
+            return;
+        }
+
+        CommandPreviewValue.Text = BuildCommandPreview();
+        UpdateConnectionHint();
+    }
+
+    private string BuildCommandPreview()
+    {
+        var minerPath = GetPreviewMinerPath();
+        var coinData = GetSelectedCoinData();
+        var mode = _isSimulationMode ? GetSelectedMode() : "solo";
+        var difficulty = ParseIntOrDefault(DifficultyBox?.Text, 4);
+        var progressInterval = ParseUlongOrDefault(ProgressBox?.Text, 10000);
+        var host = SafeTrim(PoolHostBox?.Text, "host");
+        var port = SafeTrim(PoolPortBox?.Text, "port");
+        var user = SafeTrim(PoolUserBox?.Text, "user");
+        var pass = SafeTrim(PoolPassBox?.Text, "pass");
+        var walletPath = EnsureWalletPreviewPath();
+
+        return mode switch
+        {
+            "stratum" => $"{minerPath} stratum {host} {port} {user} {pass} --coin {coinData}",
+            "solo" => $"{minerPath} solo {host} {port} {user} {pass} --coin {coinData}",
+            _ => $"{minerPath} run \"{coinData}\" {difficulty} 0 --progress {progressInterval} --wallet \"{walletPath}\""
+        };
+    }
+
+    private string EnsureWalletPreviewPath()
+    {
+        if (!string.IsNullOrWhiteSpace(_walletPath))
+        {
+            return _walletPath;
+        }
+
+        var repoRoot = FindRepoRoot();
+        return Path.Combine(repoRoot, "wallet.dat");
+    }
+
+    private static string SafeTrim(string? value, string placeholder)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return placeholder;
+        }
+
+        return trimmed.Contains(' ') ? $"\"{trimmed}\"" : trimmed;
+    }
+
+    private string GetPreviewMinerPath()
+    {
+        var candidate = (MinerPathBox?.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return "coinminer";
+        }
+
+        return candidate.Contains(' ') ? $"\"{candidate}\"" : candidate;
+    }
+
+    private void UpdateConnectionHint()
+    {
+        if (ConnectionHintValue == null)
+        {
+            return;
+        }
+
+        var mode = _isSimulationMode ? GetSelectedMode() : "solo";
+        var missing = new Collection<string>();
+        var hostEmpty = string.IsNullOrWhiteSpace(PoolHostBox?.Text);
+        var portEmpty = string.IsNullOrWhiteSpace(PoolPortBox?.Text);
+        var binaryEmpty = string.IsNullOrWhiteSpace(MinerPathBox?.Text);
+        var binaryExists = !binaryEmpty && File.Exists(MinerPathBox!.Text.Trim());
+
+        if (!_isSimulationMode)
+        {
+            if (hostEmpty) missing.Add("host");
+            if (portEmpty) missing.Add("porta");
+            if (binaryEmpty) missing.Add("binário");
+            else if (!binaryExists) missing.Add("binário inválido");
+
+            _isReadyToStart = missing.Count == 0;
+            ConnectionHintValue.Text = _isReadyToStart
+                ? "Real: pronto para conectar via solo RPC."
+                : $"Real: defina {string.Join(", ", missing)} antes de iniciar.";
+            UpdateStartButtons();
+            return;
+        }
+
+        if (mode == "stratum" || mode == "solo")
+        {
+            if (hostEmpty) missing.Add("host");
+            if (portEmpty) missing.Add("porta");
+        }
+
+        _isReadyToStart = missing.Count == 0;
+        ConnectionHintValue.Text = _isReadyToStart
+            ? "Simulação: run/bench local ou conexão opcional a pool/node."
+            : $"Simulação: preencha {string.Join(", ", missing)} para conectar.";
+        UpdateStartButtons();
+    }
+
+    private void UpdateStartButtons()
+    {
+        if (StartStopButton == null || ApplySettingsButton == null)
+        {
+            return;
+        }
+
+        if (_minerProcess != null && !_minerProcess.HasExited)
+        {
+            StartStopButton.IsEnabled = true;
+            ApplySettingsButton.IsEnabled = true;
+            return;
+        }
+
+        StartStopButton.IsEnabled = _isReadyToStart;
+        ApplySettingsButton.IsEnabled = _isReadyToStart;
     }
 
     private async Task StopMiningAsync()
@@ -472,6 +766,7 @@ public partial class MainWindow : Window
         AddActivity("Mining stopped.");
         StartStopButton.IsEnabled = true;
         ApplySettingsButton.IsEnabled = true;
+        UpdateStartButtons();
         _isStopping = false;
     }
 
@@ -496,6 +791,7 @@ public partial class MainWindow : Window
                 StartStopButton.Content = "Start mining";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
+                UpdateStartButtons();
             });
         };
 
@@ -522,6 +818,7 @@ public partial class MainWindow : Window
             }
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
         }
         catch (Exception ex)
         {
@@ -529,6 +826,7 @@ public partial class MainWindow : Window
             AddActivity($"Failed to start process: {ex.Message}");
             StartStopButton.IsEnabled = true;
             ApplySettingsButton.IsEnabled = true;
+            UpdateStartButtons();
         }
     }
 

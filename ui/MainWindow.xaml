@@ -7,34 +7,33 @@
         Background="{DynamicResource AppBackgroundBrush}"
         Foreground="{DynamicResource TextBrush}"
         FontFamily="Segoe UI Variable"
+        FontSize="13"
         WindowStartupLocation="CenterScreen"
-        Icon="pack://application:,,,/Assets/logo.png"
+        Icon="pack://application:,,,/Assets/app-icon.png"
         Closing="OnClosing">
-    <Grid Margin="16">
+    <Grid Margin="8">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="240"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
         <Border Grid.Column="0"
                 Background="{DynamicResource SidebarBrush}"
-                CornerRadius="14"
-                Padding="18"
-                Margin="0,0,16,0">
+                CornerRadius="0,16,16,0"
+                Padding="12"
+                Margin="0,0,12,0">
             <DockPanel LastChildFill="True">
                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,20">
-                    <Border Background="{DynamicResource SidebarHoverBrush}" CornerRadius="12" Padding="10" HorizontalAlignment="Left">
-                        <Image Source="pack://application:,,,/Assets/logo.png" Width="56" Height="56"/>
-                    </Border>
-                    <TextBlock Text="SOLOCOINMINER" Foreground="{DynamicResource AccentBrush}" FontSize="18" FontWeight="Bold" Margin="0,10,0,0"/>
+                    <TextBlock Text="SOLOCOINMINER" Foreground="{DynamicResource AccentBrush}" FontSize="20" FontWeight="Bold"/>
                     <TextBlock Text="Pronto para minerar" Foreground="{DynamicResource SidebarMutedBrush}" FontSize="12" Margin="0,4,0,0"/>
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Top">
+                    <Button x:Name="NavHome" Content="Inicio" Tag="Home" Click="OnNavClick"
+                            Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}" Margin="0,0,0,6"/>
                     <Button x:Name="NavMiner" Content="Miner" Tag="Miner" Click="OnNavClick"
-                            Style="{StaticResource NavButton}" Background="{DynamicResource SidebarActiveBrush}"
-                            Foreground="{DynamicResource SidebarTextBrush}" Margin="0,0,0,6"/>
+                            Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}" Margin="0,0,0,6"/>
                     <Button x:Name="NavStats" Content="Stats" Tag="Stats" Click="OnNavClick"
                             Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}" Margin="0,0,0,6"/>
                     <Button x:Name="NavDevices" Content="Dispositivos" Tag="Devices" Click="OnNavClick"
@@ -43,7 +42,7 @@
                             Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}" Margin="0,0,0,6"/>
                     <Separator Margin="0,12,0,12" Background="{DynamicResource SidebarHoverBrush}"/>
                     <Button x:Name="NavSupport" Content="Suporte" Tag="Support" Click="OnNavClick"
-                            Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}"/>
+                            Style="{StaticResource NavButton}" Foreground="{DynamicResource SidebarMutedBrush}" Margin="0,4,0,0"/>
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,20,0,0">
@@ -99,15 +98,31 @@
                             <ToggleButton x:Name="ThemeToggle" Checked="OnThemeToggleChanged" Unchecked="OnThemeToggleChanged"
                                           Style="{StaticResource TogglePill}" Margin="0,0,12,0"/>
                             <TextBlock Text="Usuario" FontWeight="SemiBold" Margin="0,0,12,0"/>
-                            <Button Content="Sair" Style="{StaticResource SecondaryButton}"/>
+                            <Button Content="Sair" Click="OnSignOutClick" Style="{StaticResource SecondaryButton}"/>
                         </WrapPanel>
                     </Grid>
                 </Border>
 
                 <!-- Views -->
                 <Grid>
+                    <!-- Home -->
+                    <StackPanel x:Name="HomeView" Visibility="Visible">
+                        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+                            <StackPanel HorizontalAlignment="Center">
+                                <Image Source="pack://application:,,,/Assets/logo.png" Width="180" Height="180" Margin="0,4,0,12"/>
+                                <TextBlock Text="SOLOCOINMINER" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+                                <TextBlock Text="Mineracao simples, pronta para usar." Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,0" TextAlignment="Center"/>
+                                <TextBlock Text="Escolha sua carteira, configure pool/solo e inicie." Foreground="{DynamicResource MutedBrush}" Margin="0,4,0,0" TextAlignment="Center"/>
+                                <WrapPanel HorizontalAlignment="Center" Margin="0,12,0,0">
+                                    <Button Content="Ir para Miner" Click="OnGoToMinerClick" Style="{StaticResource PrimaryButton}" Margin="0,0,8,0"/>
+                                    <Button Content="Abrir docs" Click="OnOpenDocsClick" Style="{StaticResource SecondaryButton}"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <!-- Miner -->
-                    <StackPanel x:Name="MinerView" Visibility="Visible">
+                    <StackPanel x:Name="MinerView" Visibility="Collapsed">
                         <UniformGrid Columns="3" Margin="0,0,0,16">
                             <Border Style="{StaticResource Card}" Margin="0,0,12,0">
                                 <StackPanel>
@@ -196,7 +211,15 @@
                                     <TextBlock Text="Perfil de mineracao" Foreground="{DynamicResource MutedBrush}"/>
                                     <TextBlock x:Name="ProfileValue" Text="CPU: 0 H/s (SHA-256)" FontWeight="SemiBold" Margin="0,6,0,0"/>
                                     <TextBlock x:Name="ProfileDetailValue" Text="GPU: n/a" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                    <TextBlock Text="Stratum: pool local ou externo. Solo: node RPC local ou remoto. Local: demo." Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,8,0,0" TextWrapping="Wrap"/>
                                     <WrapPanel Margin="0,10,0,0">
+                                        <StackPanel Margin="0,0,12,10">
+                                            <TextBlock Text="Dispositivo" Foreground="{DynamicResource MutedBrush}"/>
+                                            <ComboBox x:Name="DeviceSelector" Width="150" SelectedIndex="0">
+                                                <ComboBoxItem Content="CPU (Processador)" Tag="cpu"/>
+                                                <ComboBoxItem Content="GPU (Placa de video)" Tag="gpu"/>
+                                            </ComboBox>
+                                        </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
                                             <TextBlock Text="Modo" Foreground="{DynamicResource MutedBrush}"/>
                                             <ComboBox x:Name="ModeSelector" Width="150" SelectedIndex="0">
@@ -204,18 +227,22 @@
                                                 <ComboBoxItem Content="Stratum (pool)" Tag="stratum"/>
                                                 <ComboBoxItem Content="Solo (node)" Tag="solo"/>
                                             </ComboBox>
+                                            <TextBlock Text="Local: demo. Stratum: pool local/externo. Solo: node RPC." Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
                                             <TextBlock Text="Host" Foreground="{DynamicResource MutedBrush}"/>
                                             <TextBox x:Name="PoolHostBox" Width="160" Text="localhost"/>
+                                            <TextBlock Text="Pool local: 127.0.0.1 | Pool externo: host do provedor" Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
                                             <TextBlock Text="Porta" Foreground="{DynamicResource MutedBrush}"/>
                                             <TextBox x:Name="PoolPortBox" Width="80" Text="8332"/>
+                                            <TextBlock Text="Stratum comum: 3333/4444. Node RPC: 8332." Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
                                             <TextBlock Text="Usuario" Foreground="{DynamicResource MutedBrush}"/>
                                             <TextBox x:Name="PoolUserBox" Width="140" Text="worker"/>
+                                            <TextBlock Text="Dica: use seu endereco de carteira como usuario." Foreground="{DynamicResource MutedBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
                                             <TextBlock Text="Senha" Foreground="{DynamicResource MutedBrush}"/>
@@ -227,9 +254,6 @@
                                                 <ComboBoxItem Content="Bitcoin" Tag="bitcoin"/>
                                                 <ComboBoxItem Content="Litecoin" Tag="litecoin"/>
                                                 <ComboBoxItem Content="Dogecoin" Tag="dogecoin"/>
-                                                <ComboBoxItem Content="Monero" Tag="monero"/>
-                                                <ComboBoxItem Content="Ravencoin" Tag="ravencoin"/>
-                                                <ComboBoxItem Content="Zcash" Tag="zcash"/>
                                             </ComboBox>
                                         </StackPanel>
                                         <StackPanel Margin="0,0,12,10">
@@ -449,7 +473,7 @@
                             <StackPanel>
                                 <TextBlock Text="Documentacao" FontSize="14" FontWeight="SemiBold"/>
                                 <TextBlock Text="Guias de instalacao, dicas de mineracao e FAQ." Foreground="{DynamicResource MutedBrush}" Margin="0,6,0,10"/>
-                                <Button Content="Abrir docs" Click="OnOpenDocsClick" Style="{StaticResource SecondaryButton}"/>
+                                <Button Content="Abrir docs" Click="OnOpenDocsClick" Style="{StaticResource SecondaryButton}" Width="140" HorizontalAlignment="Left"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

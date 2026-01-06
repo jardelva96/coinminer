@@ -2,7 +2,6 @@
 #include "../sha256.h"
 
 #include <string.h>
-#include "sha256.h"
 #include "job.h"
 
 static int hex_val(char c) {

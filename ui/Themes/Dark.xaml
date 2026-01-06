@@ -32,6 +32,11 @@
     <SolidColorBrush x:Key="BadgeTextBrush" Color="{StaticResource BadgeTextColor}"/>
     <SolidColorBrush x:Key="ActivityBgBrush" Color="{StaticResource ActivityBgColor}"/>
 
+    <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource AccentColor}" Offset="0"/>
+        <GradientStop Color="{StaticResource AccentHoverColor}" Offset="1"/>
+    </LinearGradientBrush>
+
     <LinearGradientBrush x:Key="AppBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="{StaticResource AppBgColor}" Offset="0"/>
         <GradientStop Color="{StaticResource AppBgAltColor}" Offset="1"/>

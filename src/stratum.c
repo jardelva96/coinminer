@@ -8,7 +8,12 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
 #pragma comment(lib, "ws2_32.lib")
+#define close closesocket
+#define sleep(x) Sleep((x) * 1000)
 #else
 #include <sys/types.h>
 #include <sys/socket.h>

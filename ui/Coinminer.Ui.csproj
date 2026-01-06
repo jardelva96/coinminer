@@ -8,5 +8,6 @@
 
   <ItemGroup>
     <Resource Include="..\logo.png" Link="Assets\logo.png" />
+    <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 </Project>

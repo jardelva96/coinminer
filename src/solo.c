@@ -5,16 +5,34 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+#pragma comment(lib, "ws2_32.lib")
+#define close closesocket
+#define sleep(x) Sleep((x) * 1000)
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#endif
 #include <time.h>
 #include <stdint.h>
 #include "coins/registry.h"
 #include "bitcoin/block.h"
 
 static int connect_tcp(const char *host, const char *port) {
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
+        fprintf(stderr, "[solo] WSAStartup failed\n");
+        return -1;
+    }
+#endif
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
@@ -23,21 +41,43 @@ static int connect_tcp(const char *host, const char *port) {
     struct addrinfo *res = NULL;
     int rc = getaddrinfo(host, port, &hints, &res);
     if (rc != 0) {
+#ifdef _WIN32
+        fprintf(stderr, "[solo] getaddrinfo: %s\n", gai_strerrorA(rc));
+        WSACleanup();
+#else
         fprintf(stderr, "[solo] getaddrinfo: %s\n", gai_strerror(rc));
+#endif
         return -1;
     }
 
     int sock = -1;
+#ifdef _WIN32
+    SOCKET wsock = INVALID_SOCKET;
+#endif
     for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
+#ifdef _WIN32
+        wsock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (wsock == INVALID_SOCKET) continue;
+        if (connect(wsock, p->ai_addr, (int)p->ai_addrlen) == 0) {
+            sock = (int)wsock;
+            break;
+        }
+        closesocket(wsock);
+        wsock = INVALID_SOCKET;
+#else
         sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (sock == -1) continue;
         if (connect(sock, p->ai_addr, p->ai_addrlen) == 0) break;
         close(sock);
         sock = -1;
+#endif
     }
     freeaddrinfo(res);
     if (sock == -1) {
         fprintf(stderr, "[solo] nao foi possivel conectar a %s:%s\n", host, port);
+#ifdef _WIN32
+        WSACleanup();
+#endif
     }
     return sock;
 }

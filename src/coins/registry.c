@@ -1,6 +1,10 @@
 #include "registry.h"
 
-#include <strings.h>
+#include <string.h>
+
+#ifdef _MSC_VER
+#define strcasecmp _stricmp
+#endif
 
 const char *coin_type_to_name(coin_type t) {
     switch (t) {

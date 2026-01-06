@@ -16,7 +16,8 @@ using System.Text;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
-using System.Diagnostics;
+using System.Security.Cryptography;
+using Microsoft.Win32;
 
 namespace Coinminer.Ui;
 
@@ -49,15 +50,19 @@ public partial class MainWindow : Window
     private ulong _lastUserTicks;
     private DeviceInfo? _cpuDevice;
     private DeviceInfo? _memoryDevice;
+    private string _activeViewKey = "Miner";
 
     public MainWindow()
     {
         InitializeComponent();
-        SetActiveView("Miner");
+        SetActiveView("Home");
         DataContext = this;
         LocalWalletRadio.Checked += OnWalletOptionChanged;
         ExternalWalletRadio.Checked += OnWalletOptionChanged;
         WalletAddressBox.IsEnabled = false;
+        DeviceSelector.SelectionChanged += (_, _) => UpdateStatsSummary();
+        ModeSelector.SelectionChanged += (_, _) => UpdateStatsSummary();
+        CoinSelector.SelectionChanged += (_, _) => UpdateStatsSummary();
 
         _uptimeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _uptimeTimer.Tick += (_, _) => UpdateUptime();
@@ -86,6 +91,8 @@ public partial class MainWindow : Window
 
     private void SetActiveView(string viewKey)
     {
+        _activeViewKey = viewKey;
+        HomeView.Visibility = viewKey == "Home" ? Visibility.Visible : Visibility.Collapsed;
         MinerView.Visibility = viewKey == "Miner" ? Visibility.Visible : Visibility.Collapsed;
         StatsView.Visibility = viewKey == "Stats" ? Visibility.Visible : Visibility.Collapsed;
         DevicesView.Visibility = viewKey == "Devices" ? Visibility.Visible : Visibility.Collapsed;
@@ -93,6 +100,7 @@ public partial class MainWindow : Window
         SupportView.Visibility = viewKey == "Support" ? Visibility.Visible : Visibility.Collapsed;
         DocsView.Visibility = Visibility.Collapsed;
 
+        SetNavButtonActive(NavHome, viewKey == "Home");
         SetNavButtonActive(NavMiner, viewKey == "Miner");
         SetNavButtonActive(NavStats, viewKey == "Stats");
         SetNavButtonActive(NavDevices, viewKey == "Devices");
@@ -102,8 +110,14 @@ public partial class MainWindow : Window
 
     private void OnOpenDocsClick(object sender, RoutedEventArgs e)
     {
+        SetActiveView("Support");
         SupportView.Visibility = Visibility.Collapsed;
         DocsView.Visibility = Visibility.Visible;
+    }
+
+    private void OnGoToMinerClick(object sender, RoutedEventArgs e)
+    {
+        SetActiveView("Miner");
     }
 
     private void OnBackToSupportClick(object sender, RoutedEventArgs e)
@@ -117,6 +131,12 @@ public partial class MainWindow : Window
         const string docsUrl = "https://solocoinminer.local/docs";
         Clipboard.SetText(docsUrl);
         AddActivity("Link de documentacao copiado.");
+    }
+
+    private async void OnSignOutClick(object sender, RoutedEventArgs e)
+    {
+        await StopMiningAsync();
+        Close();
     }
 
     private void OnOpenTelegramClick(object sender, RoutedEventArgs e)
@@ -168,6 +188,19 @@ public partial class MainWindow : Window
     private void OnThemeToggleChanged(object sender, RoutedEventArgs e)
     {
         ApplyTheme(ThemeToggle.IsChecked == true);
+        RefreshThemeBindings();
+    }
+
+    private void RefreshThemeBindings()
+    {
+        SetNavButtonActive(NavHome, _activeViewKey == "Home");
+        SetNavButtonActive(NavMiner, _activeViewKey == "Miner");
+        SetNavButtonActive(NavStats, _activeViewKey == "Stats");
+        SetNavButtonActive(NavDevices, _activeViewKey == "Devices");
+        SetNavButtonActive(NavTransactions, _activeViewKey == "Transactions");
+        SetNavButtonActive(NavSupport, _activeViewKey == "Support");
+        InvalidateVisual();
+        UpdateLayout();
     }
 
     private async void OnStartStopClick(object sender, RoutedEventArgs e)
@@ -198,15 +231,30 @@ public partial class MainWindow : Window
 
         try
         {
-            if (!TryGetRpcSettings(out var host, out var port, out var user, out var pass, out var error))
+            if (TryGetRpcSettings(out var host, out var port, out var user, out var pass, out var error))
             {
-                WalletStatusValue.Text = error;
-                return;
+                try
+                {
+                    var address = await RpcCallForStringAsync("getnewaddress", Array.Empty<object>(), host, port, user, pass);
+                    SaveWalletFile(address);
+                    WalletStatusValue.Text = "Carteira criada via RPC";
+                    AddActivity("Wallet created via RPC.");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    AddActivity($"RPC falhou, criando carteira local: {ex.Message}");
+                }
+            }
+            else
+            {
+                AddActivity($"RPC invalido, criando carteira local: {error}");
             }
 
-            var address = await RpcCallForStringAsync("getnewaddress", Array.Empty<object>(), host, port, user, pass);
-            SaveWalletFile(address);
-            AddActivity("Wallet created.");
+            var localAddress = GenerateLocalAddress();
+            SaveWalletFile(localAddress);
+            WalletStatusValue.Text = "Carteira local criada";
+            AddActivity("Wallet created locally.");
         }
         catch (Exception ex)
         {
@@ -217,7 +265,23 @@ public partial class MainWindow : Window
     private void OnOpenWalletClick(object sender, RoutedEventArgs e)
     {
         var repoRoot = FindRepoRoot();
-        _walletPath = Path.Combine(repoRoot, "wallet.dat");
+        var defaultPath = Path.Combine(repoRoot, "wallet.dat");
+        var dialog = new OpenFileDialog
+        {
+            Title = "Abrir carteira",
+            Filter = "Carteira (*.dat)|*.dat|Todos arquivos (*.*)|*.*",
+            FileName = Path.GetFileName(defaultPath),
+            InitialDirectory = Path.GetDirectoryName(defaultPath)
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            _walletPath = dialog.FileName;
+            LoadWallet();
+            return;
+        }
+
+        _walletPath = defaultPath;
         LoadWallet();
     }
 
@@ -355,6 +419,7 @@ public partial class MainWindow : Window
         ProfileDetailValue.Text = $"Coin: {_coinLabel}";
         BalanceFiat.Text = $"{_coinLabel} saldo";
         StatusValue.Text = "Iniciando";
+        ProfileValue.Text = $"{GetSelectedDeviceShortLabel()}: -";
 
         _isStratumMode = GetSelectedMode() == "stratum";
         var isSoloMode = GetSelectedMode() == "solo";
@@ -416,7 +481,7 @@ public partial class MainWindow : Window
             StatsHashrateValue.Text = "-";
             StatsAttemptsValue.Text = "-";
 
-            ProfileValue.Text = "Stratum session";
+            ProfileValue.Text = $"Stratum ({GetSelectedDeviceShortLabel()})";
 
             var startInfo = new ProcessStartInfo
             {
@@ -458,7 +523,7 @@ public partial class MainWindow : Window
             }
 
             StatusDetailValue.Text = $"Conectando no: {host}:{port}";
-            ProfileValue.Text = "Solo node session";
+            ProfileValue.Text = $"Solo node ({GetSelectedDeviceShortLabel()})";
             StratumStatusValue.Text = "Node connecting";
             SoloStatusValue.Text = "Solo: conectando";
 
@@ -667,7 +732,7 @@ public partial class MainWindow : Window
                     _lastHashrate = rate.Value;
                     HashrateValue.Text = $"{_lastHashrate:0.##} H/s";
                     StatsHashrateValue.Text = $"{_lastHashrate:0.##} H/s";
-                    ProfileValue.Text = $"CPU: {_lastHashrate:0.##} H/s (SHA-256)";
+                    ProfileValue.Text = $"{GetSelectedDeviceShortLabel()}: {_lastHashrate:0.##} H/s (SHA-256)";
                 }
 
                 return;
@@ -952,6 +1017,15 @@ public partial class MainWindow : Window
         PoolUserBox.Text = address;
     }
 
+    private static string GenerateLocalAddress()
+    {
+        const string prefix = "SCM";
+        var data = new byte[20];
+        RandomNumberGenerator.Fill(data);
+        var hex = BitConverter.ToString(data).Replace("-", string.Empty).ToLowerInvariant();
+        return $"{prefix}{hex}";
+    }
+
     private bool TryGetRpcSettings(out string host, out int port, out string user, out string pass, out string error)
     {
         host = string.Empty;
@@ -1076,6 +1150,20 @@ public partial class MainWindow : Window
             return tag;
         }
         return "local";
+    }
+
+    private string GetSelectedDevice()
+    {
+        if (DeviceSelector.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            return tag;
+        }
+        return "cpu";
+    }
+
+    private string GetSelectedDeviceShortLabel()
+    {
+        return GetSelectedDevice().Equals("gpu", StringComparison.OrdinalIgnoreCase) ? "GPU" : "CPU";
     }
 
     private static bool IsStratumCoinSupported(string coin)
@@ -1318,7 +1406,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        StatsModeValue.Text = GetSelectedModeLabel();
+        StatsModeValue.Text = $"{GetSelectedModeLabel()} ({GetSelectedDeviceShortLabel()})";
         StatsCoinValue.Text = GetSelectedCoinLabel();
 
         var host = PoolHostBox.Text?.Trim() ?? string.Empty;

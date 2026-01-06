@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Coinminer.Ui")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+accd040a99f37b07c4d5a278c3950d147dc848ef")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fcbfcd262f4e7fb64f7b8bd308ee003ef3f0a60f")]
 [assembly: System.Reflection.AssemblyProductAttribute("Coinminer.Ui")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Coinminer.Ui")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -18,7 +18,7 @@ add_executable(coinminer
 )
 
 if (MSVC)
-  target_compile_options(coinminer PRIVATE /W4 /O2 /RTC1-)
+  target_compile_options(coinminer PRIVATE /W4 /O2)
 else()
   target_compile_options(coinminer PRIVATE -O2 -Wall -Wextra -Wpedantic)
 endif()

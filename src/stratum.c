@@ -5,29 +5,68 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#endif
 #include <time.h>
 #include <stdint.h>
 #include "bitcoin/job.h"
 #include "coins/registry.h"
 #include "bitcoin/block.h"
 
+#ifdef _WIN32
+static int connect_tcp(const char *host, const char *port) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
+        fprintf(stderr, "WSAStartup failed\n");
+        return -1;
+    }
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    struct addrinfo *res = NULL;
+    int rc = getaddrinfo(host, port, &hints, &res);
+    if (rc != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerrorA(rc));
+        WSACleanup();
+        return -1;
+    }
+    SOCKET sock = INVALID_SOCKET;
+    for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
+        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (sock == INVALID_SOCKET) continue;
+        if (connect(sock, p->ai_addr, (int)p->ai_addrlen) == 0) break;
+        closesocket(sock);
+        sock = INVALID_SOCKET;
+    }
+    freeaddrinfo(res);
+    if (sock == INVALID_SOCKET) {
+        fprintf(stderr, "Nao foi possivel conectar a %s:%s\n", host, port);
+        WSACleanup();
+        return -1;
+    }
+    return (int)sock;
+}
+#else
 static int connect_tcp(const char *host, const char *port) {
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-
     struct addrinfo *res = NULL;
     int rc = getaddrinfo(host, port, &hints, &res);
     if (rc != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
         return -1;
     }
-
     int sock = -1;
     for (struct addrinfo *p = res; p != NULL; p = p->ai_next) {
         sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
@@ -37,19 +76,28 @@ static int connect_tcp(const char *host, const char *port) {
         sock = -1;
     }
     freeaddrinfo(res);
-
     if (sock == -1) {
         fprintf(stderr, "Nao foi possivel conectar a %s:%s\n", host, port);
     }
     return sock;
 }
+#endif
 
+#ifdef _WIN32
+static int send_line(int sock, const char *msg) {
+    size_t len = strlen(msg);
+    if (send((SOCKET)sock, msg, (int)len, 0) < 0) return 0;
+    if (send((SOCKET)sock, "\n", 1, 0) < 0) return 0;
+    return 1;
+}
+#else
 static int send_line(int sock, const char *msg) {
     size_t len = strlen(msg);
     if (send(sock, msg, len, 0) < 0) return 0;
     if (send(sock, "\n", 1, 0) < 0) return 0;
     return 1;
 }
+#endif
 
 static volatile sig_atomic_t stop_flag = 0;
 
@@ -467,7 +515,11 @@ int stratum_run(const stratum_options *opts) {
                 return 1;
             }
             fprintf(stderr, "[stratum] tentando reconectar em %d segundos...\n", opts->reconnect_delay_secs);
+#ifdef _WIN32
+            Sleep((unsigned int)opts->reconnect_delay_secs * 1000);
+#else
             sleep((unsigned int)opts->reconnect_delay_secs);
+#endif
             continue;
         }
 
@@ -580,7 +632,12 @@ int stratum_run(const stratum_options *opts) {
         }
 
         printf("[stratum] finalizado. Notifies recebidas: %zu\n", notify_count);
+        #ifdef _WIN32
+        closesocket(sock);
+        WSACleanup();
+        #else
         close(sock);
+        #endif
 
 wait_reconnect:
         if (stop_flag) break;

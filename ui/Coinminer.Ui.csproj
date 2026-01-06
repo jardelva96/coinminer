@@ -5,4 +5,8 @@
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\logo.png" Link="Assets\logo.png" />
+  </ItemGroup>
 </Project>

@@ -4,22 +4,31 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Threading.Tasks;
-using System.Security.Cryptography;
 using System.Text;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace Coinminer.Ui;
 
 public partial class MainWindow : Window
 {
+    private bool UseLocalWallet => LocalWalletRadio?.IsChecked == true;
     public ObservableCollection<string> ActivityLog { get; } = new();
+    public ObservableCollection<DeviceInfo> Devices { get; } = new();
 
     private readonly DispatcherTimer _uptimeTimer;
     private readonly DispatcherTimer _walletTimer;
+    private readonly DispatcherTimer _deviceTimer;
     private Process? _minerProcess;
     private DateTime _miningStartedAt;
     private ulong _lastAttempts;
@@ -35,18 +44,31 @@ public partial class MainWindow : Window
     private ulong _stratumBytesOut;
     private double _stratumDifficulty;
     private string _lastWalletAddress = string.Empty;
+    private ulong _lastIdleTicks;
+    private ulong _lastKernelTicks;
+    private ulong _lastUserTicks;
+    private DeviceInfo? _cpuDevice;
+    private DeviceInfo? _memoryDevice;
 
     public MainWindow()
     {
         InitializeComponent();
         SetActiveView("Miner");
         DataContext = this;
+        LocalWalletRadio.Checked += OnWalletOptionChanged;
+        ExternalWalletRadio.Checked += OnWalletOptionChanged;
+        WalletAddressBox.IsEnabled = false;
 
         _uptimeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _uptimeTimer.Tick += (_, _) => UpdateUptime();
 
         _walletTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _walletTimer.Tick += (_, _) => LoadWallet();
+
+        _deviceTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _deviceTimer.Tick += (_, _) => UpdateDeviceStats();
+        LoadDevices();
+        _deviceTimer.Start();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
@@ -69,12 +91,63 @@ public partial class MainWindow : Window
         DevicesView.Visibility = viewKey == "Devices" ? Visibility.Visible : Visibility.Collapsed;
         TransactionsView.Visibility = viewKey == "Transactions" ? Visibility.Visible : Visibility.Collapsed;
         SupportView.Visibility = viewKey == "Support" ? Visibility.Visible : Visibility.Collapsed;
+        DocsView.Visibility = Visibility.Collapsed;
 
         SetNavButtonActive(NavMiner, viewKey == "Miner");
         SetNavButtonActive(NavStats, viewKey == "Stats");
         SetNavButtonActive(NavDevices, viewKey == "Devices");
         SetNavButtonActive(NavTransactions, viewKey == "Transactions");
         SetNavButtonActive(NavSupport, viewKey == "Support");
+    }
+
+    private void OnOpenDocsClick(object sender, RoutedEventArgs e)
+    {
+        SupportView.Visibility = Visibility.Collapsed;
+        DocsView.Visibility = Visibility.Visible;
+    }
+
+    private void OnBackToSupportClick(object sender, RoutedEventArgs e)
+    {
+        DocsView.Visibility = Visibility.Collapsed;
+        SupportView.Visibility = Visibility.Visible;
+    }
+
+    private void OnCopyDocsLinkClick(object sender, RoutedEventArgs e)
+    {
+        const string docsUrl = "https://solocoinminer.local/docs";
+        Clipboard.SetText(docsUrl);
+        AddActivity("Link de documentacao copiado.");
+    }
+
+    private void OnOpenTelegramClick(object sender, RoutedEventArgs e)
+    {
+        OpenUrl("https://t.me/solocoinminer");
+    }
+
+    private void OnOpenDiscordClick(object sender, RoutedEventArgs e)
+    {
+        OpenUrl("https://discord.gg/solocoinminer");
+    }
+
+    private void OnOpenWebsiteClick(object sender, RoutedEventArgs e)
+    {
+        OpenUrl("https://solocoinminer.local");
+    }
+
+    private void OpenUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            AddActivity($"Falha ao abrir link: {ex.Message}");
+        }
     }
 
     private void SetNavButtonActive(Button button, bool isActive)
@@ -118,20 +191,21 @@ public partial class MainWindow : Window
         StartMining();
     }
 
-    private void OnCreateWalletClick(object sender, RoutedEventArgs e)
+    private async void OnCreateWalletClick(object sender, RoutedEventArgs e)
     {
         var repoRoot = FindRepoRoot();
         _walletPath = Path.Combine(repoRoot, "wallet.dat");
 
         try
         {
-            var address = GenerateAddress();
-            var contents = $"{address}{Environment.NewLine}0{Environment.NewLine}0{Environment.NewLine}";
-            File.WriteAllText(_walletPath, contents);
-            WalletAddressBox.Text = address;
-            WalletBalanceValue.Text = "Balance: 0";
-            WalletStatusValue.Text = $"Wallet saved: {_walletPath}";
-            PoolUserBox.Text = address;
+            if (!TryGetRpcSettings(out var host, out var port, out var user, out var pass, out var error))
+            {
+                WalletStatusValue.Text = error;
+                return;
+            }
+
+            var address = await RpcCallForStringAsync("getnewaddress", Array.Empty<object>(), host, port, user, pass);
+            SaveWalletFile(address);
             AddActivity("Wallet created.");
         }
         catch (Exception ex)
@@ -160,10 +234,7 @@ public partial class MainWindow : Window
 
         try
         {
-            var contents = $"{address}{Environment.NewLine}0{Environment.NewLine}0{Environment.NewLine}";
-            File.WriteAllText(_walletPath, contents);
-            WalletStatusValue.Text = $"Wallet saved: {_walletPath}";
-            PoolUserBox.Text = address;
+            SaveWalletFile(address);
             AddActivity("Wallet saved.");
         }
         catch (Exception ex)
@@ -183,6 +254,12 @@ public partial class MainWindow : Window
 
         PoolUserBox.Text = address;
         WalletStatusValue.Text = "Wallet address applied to pool user";
+    }
+
+    private void OnWalletOptionChanged(object sender, RoutedEventArgs e)
+    {
+        if (WalletAddressBox == null) return;
+        WalletAddressBox.IsEnabled = ExternalWalletRadio.IsChecked == true;
     }
 
     private void OnSwitchToStratumClick(object sender, RoutedEventArgs e)
@@ -250,6 +327,15 @@ public partial class MainWindow : Window
         }
 
         _walletPath = Path.Combine(repoRoot, "wallet.dat");
+        string payoutAddress = null;
+        if (UseLocalWallet)
+        {
+            payoutAddress = LoadLocalWalletAddress();
+        }
+        else
+        {
+            payoutAddress = (WalletAddressBox.Text ?? string.Empty).Trim();
+        }
         MinerPathValue.Text = $"Miner: {minerPath}";
         _miningStartedAt = DateTime.UtcNow;
         _lastAttempts = 0;
@@ -267,17 +353,18 @@ public partial class MainWindow : Window
         _coinLabel = GetSelectedCoinLabel();
         var coinData = GetSelectedCoinData();
         ProfileDetailValue.Text = $"Coin: {_coinLabel}";
-        BalanceFiat.Text = $"{_coinLabel} balance";
-        StatusValue.Text = "Starting";
+        BalanceFiat.Text = $"{_coinLabel} saldo";
+        StatusValue.Text = "Iniciando";
 
         _isStratumMode = GetSelectedMode() == "stratum";
         var isSoloMode = GetSelectedMode() == "solo";
+        // Se for stratum, usar payoutAddress como user se não estiver preenchido
         if (_isStratumMode)
         {
             if (!IsStratumCoinSupported(coinData))
             {
-                SetStatus("Unsupported coin", "Select Bitcoin, Litecoin, or Dogecoin");
-                StratumStatusValue.Text = "Not connected";
+                SetStatus("Moeda nao suportada", "Selecione Bitcoin, Litecoin ou Dogecoin");
+                StratumStatusValue.Text = "Nao conectado";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
                 return;
@@ -290,7 +377,7 @@ public partial class MainWindow : Window
 
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(port))
             {
-                SetStatus("Missing pool", "Fill pool host and port");
+                SetStatus("Pool ausente", "Preencha host e porta");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
                 return;
@@ -298,16 +385,15 @@ public partial class MainWindow : Window
 
             if (string.IsNullOrWhiteSpace(user))
             {
-                var walletAddress = GetWalletAddress();
-                user = string.IsNullOrWhiteSpace(walletAddress) ? "worker" : walletAddress;
+                user = string.IsNullOrWhiteSpace(payoutAddress) ? "worker" : payoutAddress;
                 PoolUserBox.Text = user;
             }
 
             var addressPart = ExtractAddressPart(user);
             if (!string.IsNullOrWhiteSpace(addressPart) && !IsValidAddressForCoin(coinData, addressPart))
             {
-                SetStatus("Invalid address", "Pool user must be a valid wallet address");
-                StratumStatusValue.Text = "Not connected";
+                SetStatus("Endereco invalido", "Usuario da pool deve ser um endereco valido");
+                StratumStatusValue.Text = "Nao conectado";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
                 return;
@@ -317,9 +403,9 @@ public partial class MainWindow : Window
                 pass = "x";
             }
 
-            StatusDetailValue.Text = $"Connecting: {host}:{port}";
-            StratumStatusValue.Text = "Connecting...";
-            StratumSubmitValue.Text = "Submit: 0 / 0";
+            StatusDetailValue.Text = $"Conectando: {host}:{port}";
+            StratumStatusValue.Text = "Conectando...";
+            StratumSubmitValue.Text = "Envios: 0 / 0";
             _stratumNotifyCount = 0;
             _stratumBytesIn = 0;
             _stratumBytesOut = 0;
@@ -356,7 +442,7 @@ public partial class MainWindow : Window
 
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(port))
             {
-                SetStatus("Missing node", "Fill host and port");
+                SetStatus("No ausente", "Preencha host e porta");
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
                 return;
@@ -371,10 +457,10 @@ public partial class MainWindow : Window
                 pass = "rpcpass";
             }
 
-            StatusDetailValue.Text = $"Connecting node: {host}:{port}";
+            StatusDetailValue.Text = $"Conectando no: {host}:{port}";
             ProfileValue.Text = "Solo node session";
             StratumStatusValue.Text = "Node connecting";
-            SoloStatusValue.Text = "Solo: connecting";
+            SoloStatusValue.Text = "Solo: conectando";
 
             var startInfo = new ProcessStartInfo
             {
@@ -391,14 +477,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        StratumStatusValue.Text = "Not connected";
-        SoloStatusValue.Text = "Solo: idle";
-        StatusDetailValue.Text = $"Starting: {coinData} @ diff {difficulty}";
+        StratumStatusValue.Text = "Nao conectado";
+        SoloStatusValue.Text = "Solo: ocioso";
+        StatusDetailValue.Text = $"Iniciando: {coinData} @ diff {difficulty}";
 
         var localStartInfo = new ProcessStartInfo
         {
             FileName = minerPath,
-            Arguments = $"run \"{coinData}\" {difficulty} 0 --progress {progressInterval} --wallet \"{_walletPath}\"",
+            Arguments = $"run \"{coinData}\" {difficulty} 0 --progress {progressInterval} --wallet \"{(UseLocalWallet ? _walletPath : payoutAddress)}\"",
             WorkingDirectory = repoRoot,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -406,6 +492,22 @@ public partial class MainWindow : Window
             CreateNoWindow = true
         };
         StartProcess(localStartInfo, $"Mining {_coinLabel} (demo)");
+
+    }
+
+    private string LoadLocalWalletAddress()
+    {
+        // Simples: lê o endereço salvo no arquivo wallet.dat (ajuste conforme seu formato)
+        try
+        {
+            if (File.Exists(_walletPath))
+            {
+                var lines = File.ReadAllLines(_walletPath);
+                return lines.Length > 0 ? lines[0].Trim() : string.Empty;
+            }
+        }
+        catch { }
+        return string.Empty;
     }
 
     private async Task StopMiningAsync()
@@ -466,9 +568,9 @@ public partial class MainWindow : Window
         }
 
         SetStatus("Stopped", "Miner stopped");
-        StratumStatusValue.Text = "Not connected";
-        SoloStatusValue.Text = "Solo: idle";
-        StartStopButton.Content = "Start mining";
+        StratumStatusValue.Text = "Nao conectado";
+        SoloStatusValue.Text = "Solo: ocioso";
+        StartStopButton.Content = "Iniciar mineracao";
         AddActivity("Mining stopped.");
         StartStopButton.IsEnabled = true;
         ApplySettingsButton.IsEnabled = true;
@@ -493,7 +595,7 @@ public partial class MainWindow : Window
                 {
                 }
                 SetStatus("Stopped", $"Process exited (code {exitCode})");
-                StartStopButton.Content = "Start mining";
+                StartStopButton.Content = "Iniciar mineracao";
                 StartStopButton.IsEnabled = true;
                 ApplySettingsButton.IsEnabled = true;
             });
@@ -513,7 +615,7 @@ public partial class MainWindow : Window
             _minerProcess.BeginErrorReadLine();
 
             SetStatus("Running", statusLabel);
-            StartStopButton.Content = "Stop mining";
+            StartStopButton.Content = "Parar mineracao";
             AddActivity($"{statusLabel} started.");
             _uptimeTimer.Start();
             if (!_isStratumMode)
@@ -549,14 +651,14 @@ public partial class MainWindow : Window
             {
                 if (line.Contains("solo", StringComparison.OrdinalIgnoreCase))
                 {
-                    SoloStatusValue.Text = "Solo: mining";
+                    SoloStatusValue.Text = "Solo: minerando";
                 }
                 var attempts = ExtractFirstUlong(line);
                 if (attempts.HasValue)
                 {
                     _lastAttempts = attempts.Value;
-                    AttemptsValue.Text = $"{_lastAttempts:N0} attempts";
-                    StatsAttemptsValue.Text = $"{_lastAttempts:N0} attempts";
+                    AttemptsValue.Text = $"{_lastAttempts:N0} tentativas";
+                    StatsAttemptsValue.Text = $"{_lastAttempts:N0} tentativas";
                 }
 
                 var rate = ExtractHashrate(line);
@@ -575,15 +677,15 @@ public partial class MainWindow : Window
             {
                 if (line.Contains("conectado", StringComparison.OrdinalIgnoreCase))
                 {
-                    StratumStatusValue.Text = "Connected";
+                    StratumStatusValue.Text = "Conectado";
                 }
                 if (line.Contains("conexao encerrada", StringComparison.OrdinalIgnoreCase))
                 {
-                    StratumStatusValue.Text = "Disconnected";
+                    StratumStatusValue.Text = "Desconectado";
                 }
                 if (line.Contains("reconectando", StringComparison.OrdinalIgnoreCase))
                 {
-                    StratumStatusValue.Text = "Reconnecting";
+                    StratumStatusValue.Text = "Reconectando";
                 }
                 if (line.Contains("difficulty set to", StringComparison.OrdinalIgnoreCase))
                 {
@@ -591,7 +693,7 @@ public partial class MainWindow : Window
                     if (diff.HasValue)
                     {
                         _stratumDifficulty = diff.Value;
-                        StratumDifficultyValue.Text = $"Difficulty: {_stratumDifficulty:0.######}";
+                        StratumDifficultyValue.Text = $"Dificuldade: {_stratumDifficulty:0.######}";
                     }
                 }
                 if (line.StartsWith("[stratum] stats:", StringComparison.OrdinalIgnoreCase))
@@ -609,15 +711,15 @@ public partial class MainWindow : Window
             {
                 if (line.Contains("conectado", StringComparison.OrdinalIgnoreCase))
                 {
-                    SoloStatusValue.Text = "Solo: connected";
+                    SoloStatusValue.Text = "Solo: conectado";
                 }
                 if (line.Contains("mining job", StringComparison.OrdinalIgnoreCase))
                 {
-                    SoloStatusValue.Text = "Solo: mining";
+                    SoloStatusValue.Text = "Solo: minerando";
                 }
                 if (line.Contains("submitblock enviado", StringComparison.OrdinalIgnoreCase))
                 {
-                    SoloStatusValue.Text = "Solo: submit sent";
+                    SoloStatusValue.Text = "Solo: envio feito";
                 }
                 return;
             }
@@ -626,7 +728,7 @@ public partial class MainWindow : Window
             {
                 _lastBlocks += 1;
                 BlocksValue.Text = _lastBlocks.ToString("N0", CultureInfo.InvariantCulture);
-                StatsBlocksValue.Text = $"Blocks mined: {_lastBlocks:N0}";
+                StatsBlocksValue.Text = $"Blocos minerados: {_lastBlocks:N0}";
                 return;
             }
 
@@ -675,14 +777,14 @@ public partial class MainWindow : Window
             if (ulong.TryParse(lines[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var balance))
             {
                 UpdateBalance(balance);
-                WalletBalanceValue.Text = $"Balance: {balance:N0}";
+                WalletBalanceValue.Text = $"Saldo: {balance:N0}";
             }
 
             if (ulong.TryParse(lines[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var blocks))
             {
                 _lastBlocks = blocks;
                 BlocksValue.Text = _lastBlocks.ToString("N0", CultureInfo.InvariantCulture);
-                StatsBlocksValue.Text = $"Blocks mined: {_lastBlocks:N0}";
+                StatsBlocksValue.Text = $"Blocos minerados: {_lastBlocks:N0}";
             }
 
             WalletAddressBox.Text = lines[0];
@@ -698,8 +800,8 @@ public partial class MainWindow : Window
     {
         BalanceValue.Text = balance.ToString("N0", CultureInfo.InvariantCulture);
         BalanceTicker.Text = $"{balance:N0} {_coinLabel.ToUpperInvariant()}";
-        BalanceFiat.Text = $"{_coinLabel} balance";
-        WalletBalanceValue.Text = $"Balance: {balance:N0}";
+        BalanceFiat.Text = $"{_coinLabel} saldo";
+        WalletBalanceValue.Text = $"Saldo: {balance:N0}";
     }
 
     private void SetStatus(string status, string detail)
@@ -840,16 +942,91 @@ public partial class MainWindow : Window
         return fallback;
     }
 
-    private static string GenerateAddress()
+    private void SaveWalletFile(string address)
     {
-        Span<byte> data = stackalloc byte[32];
-        RandomNumberGenerator.Fill(data);
-        var sb = new StringBuilder(64);
-        foreach (var b in data)
+        var contents = $"{address}{Environment.NewLine}0{Environment.NewLine}0{Environment.NewLine}";
+        File.WriteAllText(_walletPath, contents);
+        WalletAddressBox.Text = address;
+        WalletBalanceValue.Text = "Saldo: 0";
+        WalletStatusValue.Text = $"Wallet saved: {_walletPath}";
+        PoolUserBox.Text = address;
+    }
+
+    private bool TryGetRpcSettings(out string host, out int port, out string user, out string pass, out string error)
+    {
+        host = string.Empty;
+        user = "rpcuser";
+        pass = "rpcpass";
+        error = string.Empty;
+        port = 0;
+
+        var hostText = PoolHostBox.Text?.Trim() ?? string.Empty;
+        var portText = PoolPortBox.Text?.Trim() ?? string.Empty;
+        var userText = PoolUserBox.Text?.Trim() ?? string.Empty;
+        var passText = PoolPassBox.Text?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(hostText))
         {
-            sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
+            error = "RPC host is empty";
+            return false;
         }
-        return sb.ToString();
+
+        if (!int.TryParse(portText, NumberStyles.Integer, CultureInfo.InvariantCulture, out port) || port <= 0)
+        {
+            error = "RPC port is invalid";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(userText))
+        {
+            user = userText;
+        }
+
+        if (!string.IsNullOrWhiteSpace(passText))
+        {
+            pass = passText;
+        }
+
+        host = hostText;
+        return true;
+    }
+
+    private static async Task<string> RpcCallForStringAsync(string method, object[] parameters, string host, int port, string user, string pass)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            jsonrpc = "1.0",
+            id = "solocoinminer-ui",
+            method,
+            @params = parameters
+        });
+
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri($"http://{host}:{port}/"));
+        request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+        var authBytes = Encoding.ASCII.GetBytes($"{user}:{pass}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException($"RPC HTTP {(int)response.StatusCode}: {body}");
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
+        {
+            throw new InvalidOperationException($"RPC error: {error}");
+        }
+
+        if (!doc.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.String)
+        {
+            throw new InvalidOperationException("RPC result missing or not a string.");
+        }
+
+        return result.GetString() ?? string.Empty;
     }
 
     private string GetWalletAddress()
@@ -1009,7 +1186,7 @@ public partial class MainWindow : Window
                 if (value.HasValue)
                 {
                     _stratumNotifyCount = value.Value;
-                    StratumNotifyValue.Text = $"Notify: {_stratumNotifyCount:N0}";
+                    StratumNotifyValue.Text = $"Notificacoes: {_stratumNotifyCount:N0}";
                 }
             }
             else if (part.Contains("bytes_in=", StringComparison.OrdinalIgnoreCase))
@@ -1030,7 +1207,7 @@ public partial class MainWindow : Window
             }
         }
 
-        StratumBytesValue.Text = $"Traffic: {_stratumBytesIn:N0} / {_stratumBytesOut:N0}";
+        StratumBytesValue.Text = $"Trafego: {_stratumBytesIn:N0} / {_stratumBytesOut:N0}";
     }
 
     private void UpdateStratumSubmits(string line)
@@ -1043,7 +1220,7 @@ public partial class MainWindow : Window
                 var value = ExtractFirstUlong(part);
                 if (value.HasValue)
                 {
-                    StratumSubmitValue.Text = $"Submit: {value.Value:N0} / {ExtractRejectCount(line):N0}";
+                    StratumSubmitValue.Text = $"Envios: {value.Value:N0} / {ExtractRejectCount(line):N0}";
                 }
             }
         }
@@ -1059,5 +1236,338 @@ public partial class MainWindow : Window
         var part = line.Substring(idx);
         var value = ExtractFirstUlong(part);
         return value ?? 0;
+    }
+
+    private void LoadDevices()
+    {
+        Devices.Clear();
+
+        _cpuDevice = new DeviceInfo
+        {
+            Title = $"CPU - {GetCpuName()}",
+            Detail = $"Uso: --% | Threads: {Environment.ProcessorCount}"
+        };
+        Devices.Add(_cpuDevice);
+
+        _memoryDevice = new DeviceInfo
+        {
+            Title = "Memoria RAM",
+            Detail = "Uso: --"
+        };
+        Devices.Add(_memoryDevice);
+
+        foreach (var gpu in GetGpuDevices())
+        {
+            Devices.Add(new DeviceInfo
+            {
+                Title = $"GPU - {gpu.Name}",
+                Detail = $"Estado: {gpu.State}"
+            });
+        }
+    }
+
+    private void UpdateDeviceStats()
+    {
+        if (_cpuDevice != null)
+        {
+            var usage = GetCpuUsagePercent();
+            _cpuDevice.Detail = $"Uso: {usage:0}% | Threads: {Environment.ProcessorCount}";
+            if (StatsCpuValue != null)
+            {
+                StatsCpuValue.Text = $"CPU: {usage:0}%";
+            }
+        }
+
+        if (_memoryDevice != null)
+        {
+            if (TryGetMemoryStatus(out var total, out var available))
+            {
+                var used = total - available;
+                _memoryDevice.Detail = $"Uso: {FormatBytes(used)} / {FormatBytes(total)}";
+                if (StatsMemoryValue != null)
+                {
+                    StatsMemoryValue.Text = $"RAM: {FormatBytes(used)} / {FormatBytes(total)}";
+                }
+            }
+        }
+
+        if (StatsSystemUptimeValue != null)
+        {
+            var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
+            StatsSystemUptimeValue.Text = $"Tempo ligado: {FormatDuration(uptime)}";
+        }
+
+        if (StatsOsValue != null)
+        {
+            StatsOsValue.Text = $"SO: {RuntimeInformation.OSDescription}";
+        }
+
+        if (StatsMachineValue != null)
+        {
+            StatsMachineValue.Text = $"Maquina: {Environment.MachineName}";
+        }
+
+        UpdateStatsSummary();
+    }
+
+    private void UpdateStatsSummary()
+    {
+        if (StatsModeValue == null || StatsCoinValue == null || StatsPoolValue == null ||
+            StatsUserValue == null || StatsWalletValue == null || StatsMinerValue == null)
+        {
+            return;
+        }
+
+        StatsModeValue.Text = GetSelectedModeLabel();
+        StatsCoinValue.Text = GetSelectedCoinLabel();
+
+        var host = PoolHostBox.Text?.Trim() ?? string.Empty;
+        var port = PoolPortBox.Text?.Trim() ?? string.Empty;
+        StatsPoolValue.Text = string.IsNullOrWhiteSpace(host)
+            ? "-"
+            : (string.IsNullOrWhiteSpace(port) ? host : $"{host}:{port}");
+
+        var user = PoolUserBox.Text?.Trim() ?? string.Empty;
+        StatsUserValue.Text = string.IsNullOrWhiteSpace(user) ? "-" : user;
+
+        var wallet = UseLocalWallet ? GetWalletAddress() : (WalletAddressBox.Text ?? string.Empty).Trim();
+        StatsWalletValue.Text = string.IsNullOrWhiteSpace(wallet) ? "-" : wallet;
+
+        var minerText = MinerPathValue.Text ?? string.Empty;
+        minerText = minerText.Replace("Miner: ", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+        StatsMinerValue.Text = string.IsNullOrWhiteSpace(minerText) ? "-" : minerText;
+    }
+
+    private static string FormatDuration(TimeSpan elapsed)
+    {
+        if (elapsed.TotalHours >= 1)
+        {
+            return $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m";
+        }
+
+        return $"{elapsed.Minutes}m {elapsed.Seconds}s";
+    }
+
+    private string GetSelectedModeLabel()
+    {
+        if (ModeSelector.SelectedItem is ComboBoxItem item && item.Content is string label)
+        {
+            return label;
+        }
+        return "Local";
+    }
+
+    private static string GetCpuName()
+    {
+        var cpu = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+        if (!string.IsNullOrWhiteSpace(cpu))
+        {
+            return cpu.Trim();
+        }
+
+        return "Processador";
+    }
+
+    private double GetCpuUsagePercent()
+    {
+        if (!GetSystemTimes(out var idle, out var kernel, out var user))
+        {
+            return 0;
+        }
+
+        var idleTicks = ToUInt64(idle);
+        var kernelTicks = ToUInt64(kernel);
+        var userTicks = ToUInt64(user);
+
+        if (_lastKernelTicks == 0)
+        {
+            _lastIdleTicks = idleTicks;
+            _lastKernelTicks = kernelTicks;
+            _lastUserTicks = userTicks;
+            return 0;
+        }
+
+        var idleDelta = idleTicks - _lastIdleTicks;
+        var kernelDelta = kernelTicks - _lastKernelTicks;
+        var userDelta = userTicks - _lastUserTicks;
+        var total = kernelDelta + userDelta;
+
+        _lastIdleTicks = idleTicks;
+        _lastKernelTicks = kernelTicks;
+        _lastUserTicks = userTicks;
+
+        if (total == 0)
+        {
+            return 0;
+        }
+
+        var usage = (double)(total - idleDelta) / total * 100.0;
+        if (usage < 0) usage = 0;
+        if (usage > 100) usage = 100;
+        return usage;
+    }
+
+    private static bool TryGetMemoryStatus(out ulong total, out ulong available)
+    {
+        var status = new MEMORYSTATUSEX();
+        status.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+        if (!GlobalMemoryStatusEx(ref status))
+        {
+            total = 0;
+            available = 0;
+            return false;
+        }
+
+        total = status.ullTotalPhys;
+        available = status.ullAvailPhys;
+        return true;
+    }
+
+    private static string FormatBytes(ulong bytes)
+    {
+        const double scale = 1024;
+        var value = (double)bytes;
+        var units = new[] { "B", "KB", "MB", "GB", "TB" };
+        var unitIndex = 0;
+        while (value >= scale && unitIndex < units.Length - 1)
+        {
+            value /= scale;
+            unitIndex++;
+        }
+        return $"{value:0.#} {units[unitIndex]}";
+    }
+
+    private static string ToDeviceState(int flags)
+    {
+        const int DISPLAY_DEVICE_ACTIVE = 0x1;
+        return (flags & DISPLAY_DEVICE_ACTIVE) != 0 ? "Ativo" : "Inativo";
+    }
+
+    private static IEnumerable<(string Name, string State)> GetGpuDevices()
+    {
+        var results = new List<(string Name, string State)>();
+        var device = new DISPLAY_DEVICE();
+        device.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+        uint id = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (EnumDisplayDevices(null, id, ref device, 0))
+        {
+            var name = device.DeviceString?.Trim();
+            if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
+            {
+                results.Add((name, ToDeviceState(device.StateFlags)));
+            }
+            id++;
+            device.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+        }
+
+        if (results.Count == 0)
+        {
+            results.Add(("GPU nao detectada", "Inativo"));
+        }
+
+        return results;
+    }
+
+    private static ulong ToUInt64(FILETIME time)
+    {
+        return ((ulong)time.dwHighDateTime << 32) | time.dwLowDateTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetSystemTimes(out FILETIME idleTime, out FILETIME kernelTime, out FILETIME userTime);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool EnumDisplayDevices(string? lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FILETIME
+    {
+        public uint dwLowDateTime;
+        public uint dwHighDateTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MEMORYSTATUSEX
+    {
+        public uint dwLength;
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys;
+        public ulong ullAvailPhys;
+        public ulong ullTotalPageFile;
+        public ulong ullAvailPageFile;
+        public ulong ullTotalVirtual;
+        public ulong ullAvailVirtual;
+        public ulong ullAvailExtendedVirtual;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DISPLAY_DEVICE
+    {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceKey;
+    }
+
+    public sealed class DeviceInfo : INotifyPropertyChanged
+    {
+        private string _title = string.Empty;
+        private string _detail = string.Empty;
+        private string _secondary = string.Empty;
+
+        public string Title
+        {
+            get => _title;
+            set
+            {
+                if (_title == value) return;
+                _title = value;
+                OnPropertyChanged(nameof(Title));
+            }
+        }
+
+        public string Detail
+        {
+            get => _detail;
+            set
+            {
+                if (_detail == value) return;
+                _detail = value;
+                OnPropertyChanged(nameof(Detail));
+            }
+        }
+
+        public string Secondary
+        {
+            get => _secondary;
+            set
+            {
+                if (_secondary == value) return;
+                _secondary = value;
+                OnPropertyChanged(nameof(Secondary));
+                OnPropertyChanged(nameof(SecondaryVisibility));
+            }
+        }
+
+        public Visibility SecondaryVisibility =>
+            string.IsNullOrWhiteSpace(_secondary) ? Visibility.Collapsed : Visibility.Visible;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 }
